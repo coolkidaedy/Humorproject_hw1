@@ -1,69 +1,58 @@
-import Image from "next/image";
+import { connection } from "next/server";
+import { getSupabase } from "@/lib/supabase";
 
-export default function Home() {
+type Restaurant = { id: number; name: string; neighborhood: string; cuisine: string };
+
+export default async function Home() {
+  // Read the latest rows on each visit instead of freezing the list at build time.
+  await connection();
+  let restaurants: Restaurant[] = [];
+  let failed = false;
+  try {
+    const { data, error } = await getSupabase()
+      .from("restaurants")
+      .select("id, name, neighborhood, cuisine")
+      .order("id", { ascending: true });
+    if (error) throw error;
+    restaurants = data ?? [];
+  } catch (error) {
+    console.error("Could not load restaurants from Supabase:", error);
+    failed = true;
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="mx-auto w-full max-w-5xl px-6 py-16 sm:py-24">
+      <header className="mb-12 border-b border-current/15 pb-10">
+        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400">NYC Restaurant List</p>
+        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">A taste of New York.</h1>
+        <p className="mt-5 max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">A small collection of places to eat across the city. Find your next stop by neighborhood and cuisine.</p>
+      </header>
+      {failed ? (
+        <section role="alert" className="rounded-2xl border border-amber-400/50 bg-amber-100/30 p-8">
+          <h2 className="text-xl font-semibold">The restaurant list is unavailable.</h2>
+          <p className="mt-2">We couldn’t load the collection. Please try again in a moment.</p>
+          <form action="/" method="get"><button type="submit" className="mt-5 cursor-pointer font-semibold underline underline-offset-4">Try again</button></form>
+        </section>
+      ) : restaurants.length === 0 ? (
+        <section className="rounded-2xl border border-current/15 p-8">
+          <h2 className="text-xl font-semibold">Your next favorite spot is on its way.</h2>
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">No restaurants have been added yet. Check back soon.</p>
+        </section>
+      ) : (
+        <>
+          <p className="mb-5 text-sm text-zinc-500">{restaurants.length} restaurants in the collection</p>
+          <ul className="grid gap-5 sm:grid-cols-2">
+            {restaurants.map((restaurant) => (
+              <li key={restaurant.id} className="rounded-2xl border border-zinc-200 bg-white p-7 dark:border-zinc-800 dark:bg-zinc-950">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">{restaurant.cuisine}</span>
+                <h2 className="mt-5 text-xl font-semibold leading-8">{restaurant.name}</h2>
+                <p className="mt-3 leading-7 text-zinc-600 dark:text-zinc-400">{restaurant.neighborhood}</p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <footer className="mt-12 text-sm text-zinc-500">New York City, one table at a time.</footer>
+    </main>
   );
 }

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Humor Project",
-  description: "A Next.js starter for the Humor Project.",
+  title: "NYC Restaurant List",
+  description: "Explore NYC restaurants by neighborhood and cuisine.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
