@@ -17,10 +17,6 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
     const key = process.env.GEMINI_API_KEY?.trim();
     const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "") || "gemini-3.5-flash";
     if (!key) return { error: "Caption generation is not configured yet. Please try again later." };
-    // Database-backed reservation serializes concurrent requests across server instances.
-    const { data: allowed, error: limitError } = await supabase.rpc("reserve_caption_generation");
-    if (limitError) return { error: "Generation is temporarily unavailable. Please try again later." };
-    if (!allowed) return { error: "You’ve used today’s 10 generation attempts. Come back tomorrow (UTC)." };
     const prompt = buildPrompt(input.prompt, input.tone);
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",

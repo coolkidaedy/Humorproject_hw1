@@ -22,7 +22,7 @@ export function GenerateForm({ challenge }: { challenge: string }) {
     </div>
     <div><label htmlFor="tone" className="mr-3 font-semibold">Make it</label><select name="tone" id="tone" className="rounded-lg border border-current/25 bg-white p-2 text-zinc-900">{tones.map(tone => <option key={tone}>{tone}</option>)}</select></div>
     <button disabled={pending} className={`${button} bg-emerald-800 text-white`}>{pending ? "Writing your caption…" : "Generate & publish"}</button>
-    <p className="text-xs text-zinc-500">AI-generated humor · 10 attempts per day · Resets at midnight UTC</p>
+    <p className="text-xs text-zinc-500">AI-generated humor</p>
     {state.error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{state.error}</p>}
     {state.success && <p role="status" className="text-sm">{state.success} <Link className="underline" href={`/captions/${state.captionId}`}>Open caption</Link></p>}
   </form>;

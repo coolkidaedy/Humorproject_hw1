@@ -50,10 +50,8 @@ test('actions enforce authentication and save only verified user identity', asyn
     assert.match((await voteCaption({}, form({ caption_id: '11111111-1111-4111-8111-111111111111', value: '1' }))).error, /Log in/);
     assert.equal(calls, 0);
     let saved;
-    client = { auth: { getUser: async () => ({ data: { user: { id: 'verified' } } }) }, rpc: async () => ({ data: false }) };
-    assert.match((await generateCaption({}, input)).error, /10 generation attempts/);
-    assert.equal(calls, 0);
-    client.rpc = async () => ({ data: true });
+    // No quota RPC exists: generation must work without a limiter dependency.
+    client = { auth: { getUser: async () => ({ data: { user: { id: 'verified' } } }) } };
     client.from = () => ({ insert: row => { saved = row; return { select: () => ({ single: async () => ({ data: { id: 'saved-id' } }) }) }; } });
     assert.equal((await generateCaption({}, input)).captionId, 'saved-id');
     assert.equal(saved.user_id, 'verified');

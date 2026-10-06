@@ -22,33 +22,6 @@ create table if not exists public.caption_votes (
 create index if not exists captions_feed_idx on public.captions (created_at desc, id desc);
 create index if not exists captions_user_idx on public.captions (user_id);
 create index if not exists caption_votes_caption_idx on public.caption_votes (caption_id);
-create table if not exists public.caption_generation_limits (
-  user_id uuid not null references auth.users(id) on delete cascade,
-  day date not null,
-  attempts integer not null check (attempts between 1 and 10),
-  primary key (user_id, day)
-);
-alter table public.caption_generation_limits enable row level security;
-revoke all on public.caption_generation_limits from public, anon, authenticated;
-
--- This narrowly scoped function permits only spending the caller's quota.
-create or replace function public.reserve_caption_generation() returns boolean
-language plpgsql security definer set search_path = '' as $$
-declare reserved integer;
-begin
-  if auth.uid() is null then raise exception 'Authentication required'; end if;
-  insert into public.caption_generation_limits (user_id, day, attempts)
-  values (auth.uid(), (now() at time zone 'UTC')::date, 1)
-  on conflict (user_id, day) do update
-    set attempts = public.caption_generation_limits.attempts + 1
-    where public.caption_generation_limits.attempts < 10
-  returning attempts into reserved;
-  return reserved is not null;
-end;
-$$;
-revoke all on function public.reserve_caption_generation() from public, anon;
-grant execute on function public.reserve_caption_generation() to authenticated;
-
 -- Remove permissive legacy policies; PostgreSQL otherwise combines them with OR.
 do $$ declare p record; begin
   for p in select schemaname, tablename, policyname from pg_policies

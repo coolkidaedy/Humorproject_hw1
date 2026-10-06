@@ -23,8 +23,6 @@ select pg_temp.expect_denied('select prompt from public.captions');
 do $$ begin
   if (select count(*) from public.caption_votes) <> 1 then raise exception 'Vote count wrong'; end if;
   if (select value from public.caption_votes) <> -1 then raise exception 'Vote change failed'; end if;
-  for i in 1..10 loop if not public.reserve_caption_generation() then raise exception 'Early quota rejection'; end if; end loop;
-  if public.reserve_caption_generation() then raise exception 'Quota exceeded'; end if;
 end $$;
 select set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 do $$ begin
@@ -32,14 +30,12 @@ do $$ begin
   if (select count(*) from public.profiles) <> 0 then raise exception 'Other profiles leaked'; end if;
   update public.caption_votes set value=1;
   if found then raise exception 'Other vote changed'; end if;
-  if not public.reserve_caption_generation() then raise exception 'Quota not per-user'; end if;
 end $$;
 select pg_temp.expect_denied($q$insert into public.captions(user_id,situation,tone,prompt,content,model) values('11111111-1111-4111-8111-111111111111','A student in New York','Dry humor','Prompt','Caption','test')$q$);
 set local role anon;
 select set_config('request.jwt.claim.sub','',true);
 select id, content, situation, tone, created_at from public.captions;
 select pg_temp.expect_denied('select * from public.caption_votes');
-select pg_temp.expect_denied('select public.reserve_caption_generation()');
 select pg_temp.expect_denied($q$insert into public.captions(user_id,situation,tone,prompt,content,model) values('11111111-1111-4111-8111-111111111111','A student in New York','Dry humor','Prompt','Caption','test')$q$);
 select pg_temp.expect_denied(format('insert into public.caption_votes(user_id,caption_id,value) values(%L,%L,1)','11111111-1111-4111-8111-111111111111', :'caption_id'));
 rollback;
