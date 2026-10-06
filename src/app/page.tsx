@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
@@ -26,6 +27,7 @@ export default async function Home() {
         <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400">NYC Restaurant List</p>
         <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">A taste of New York.</h1>
         <p className="mt-5 max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">A small collection of places to eat across the city. Find your next stop by neighborhood and cuisine.</p>
+      <Link href="/captions" className="mt-6 inline-block rounded-full bg-emerald-800 px-5 py-3 text-sm font-semibold text-white">Turn your NYC adventure into a caption →</Link>
       </header>
       {failed ? (
         <section role="alert" className="rounded-2xl border border-amber-400/50 bg-amber-100/30 p-8">
