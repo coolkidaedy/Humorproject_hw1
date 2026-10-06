@@ -5,6 +5,17 @@ import ts from 'typescript';
 const compile = text => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText).toString('base64')}`;
 const validation = await import(compile(readFileSync(new URL('../src/lib/caption-validation.ts', import.meta.url), 'utf8')));
 const { generationInput, voteInput, buildPrompt, dailyPrompt } = validation;
+const { geminiError } = await import(compile(readFileSync(new URL('../src/lib/gemini-error.ts', import.meta.url), 'utf8')));
+test('provider errors distinguish configuration, access, quota and outages without leaking responses', () => {
+  for (const [status, pattern] of [[400, /configuration/], [401, /API key/], [403, /denied access/], [404, /model is unavailable/], [429, /quota/], [503, /temporarily unavailable/]]) {
+    const result = geminiError(status, { error: { message: 'secret-test-key' } });
+    assert.match(result, pattern);
+    assert.ok(!result.includes('secret-test-key'));
+  }
+  assert.match(geminiError(400, { error: { message: 'API key not valid' } }), /rejected the API key/);
+  assert.match(geminiError(400, { error: { message: 'Free tier is not available in your country' } }), /billing setup/);
+  assert.match(geminiError(404, null), /model is unavailable/);
+});
 test('generation rejects malformed, short, oversized inputs and unknown tones', () => {
   for (const input of [[null, 'Dry humor'], ['tiny', 'Dry humor'], ['a'.repeat(601), 'Dry humor'], ['A valid situation', 'evil']]) assert.equal(generationInput(...input), null);
   assert.deepEqual(generationInput('  A valid situation  ', 'Dry humor'), { prompt: 'A valid situation', tone: 'Dry humor' });
@@ -20,10 +31,10 @@ test('vote rejects forged values and invalid IDs', () => {
 // Load the actual Server Actions with only their framework/network boundaries mocked.
 let actionSource = readFileSync(new URL('../src/app/captions/actions.ts', import.meta.url), 'utf8');
 actionSource = actionSource.replace(/import .* from .*;\n/g, '');
-actionSource = `const { revalidatePath, serverSupabase, buildPrompt, generationInput, voteInput } = globalThis.captionTest;\n${actionSource}`;
+actionSource = `const { revalidatePath, serverSupabase, buildPrompt, generationInput, voteInput, geminiError } = globalThis.captionTest;\n${actionSource}`;
 let client;
 const refreshed = [];
-globalThis.captionTest = { ...validation, revalidatePath: path => refreshed.push(path), serverSupabase: async () => client };
+globalThis.captionTest = { ...validation, geminiError, revalidatePath: path => refreshed.push(path), serverSupabase: async () => client };
 const { generateCaption, voteCaption } = await import(compile(actionSource));
 const form = values => { const f = new FormData(); for (const [key, value] of Object.entries(values)) f.set(key, value); return f; };
 test('actions enforce authentication and save only verified user identity', async () => {

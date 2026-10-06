@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { serverSupabase } from "@/lib/supabase/server";
 import { buildPrompt, generationInput, voteInput } from "@/lib/caption-validation";
+import { geminiError } from "@/lib/gemini-error";
 
 export type CaptionState = { error?: string; success?: string; captionId?: string };
 
@@ -13,8 +14,8 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
     const supabase = await serverSupabase();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return { error: "Log in before generating a caption." };
-    const key = process.env.GEMINI_API_KEY;
-    const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    const key = process.env.GEMINI_API_KEY?.trim();
+    const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "") || "gemini-3.5-flash";
     if (!key) return { error: "Caption generation is not configured yet. Please try again later." };
     // Database-backed reservation serializes concurrent requests across server instances.
     const { data: allowed, error: limitError } = await supabase.rpc("reserve_caption_generation");
@@ -28,7 +29,12 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
       signal: AbortSignal.timeout(40000),
       cache: "no-store",
     });
-    if (!response.ok) return { error: response.status === 429 ? "The AI provider is busy or out of quota. Please try again later." : "The AI provider couldn’t generate a caption. Please try again later." };
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      const error = geminiError(response.status, body);
+      console.error("Gemini generation failed", { httpStatus: response.status, diagnosis: error });
+      return { error };
+    }
     const result = await response.json();
     const candidate = result.candidates?.[0];
     const content = candidate?.content?.parts?.filter((part: { thought?: boolean; text?: string }) => !part.thought && typeof part.text === "string").map((part: { text: string }) => part.text).join("").trim();
