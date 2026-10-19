@@ -33,16 +33,15 @@ test('story fallback produces an editable reconstruction from guesses and clues'
   assert.match(value.body,/Grand Central Terminal/);
   assert.ok(value.body.length>=80&&value.body.length<=1200);
 });
-test('AI reconstruction uses the low-latency model path, validates JSON, and keeps provider errors private',async()=>{
+test('AI reconstruction discovers an enabled model in parallel, validates JSON, and keeps provider errors private',async()=>{
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY='test-only';let sent,requestedUrl;
+  process.env.GEMINI_API_KEY='test-only';let sent;const requestedUrls=[];
   try {
     resetGeminiModelCache();
-    globalThis.fetch=async(url,options)=>{requestedUrl=String(url);sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
+    globalThis.fetch=async(url,options)=>{requestedUrls.push(String(url));if(String(url).includes('?pageSize='))return new Response(JSON.stringify({models:[{name:'models/gemini-test-flash',supportedGenerationMethods:['generateContent']}]}));sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
     assert.deepEqual(await generateStoryDraft(finished()),draft);
-    assert.match(requestedUrl,/gemini-flash-lite-latest:generateContent/);
-    assert.doesNotMatch(requestedUrl,/models\?pageSize/);
-    assert.equal(sent.generationConfig.thinkingConfig.thinkingLevel,'low');
+    assert.ok(requestedUrls.some(url=>url.includes('/models?pageSize=')));
+    assert.ok(requestedUrls.some(url=>url.includes('gemini-flash-lite-latest:generateContent')));
     assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
     await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));

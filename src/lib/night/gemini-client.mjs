@@ -1,3 +1,6 @@
+const CACHE_MS = 10 * 60 * 1000;
+let modelCache = { expires: 0, names: [] };
+
 function safeProviderError(status, body) {
   const message = typeof body === 'object' && body && 'error' in body ? JSON.stringify(body.error).toLowerCase() : '';
   if (message.includes('api_key_invalid') || message.includes('api key not valid') || status === 401) return 'Gemini rejected the API key. Check GEMINI_API_KEY in Vercel and redeploy. (401/invalid key)';
@@ -5,6 +8,30 @@ function safeProviderError(status, body) {
   if (status === 429) return 'Gemini’s quota or rate limit has been reached. Check Google AI Studio quota or try again later. (429)';
   if (status >= 500) return 'Gemini is temporarily unavailable. Please try again later. (Provider server error)';
   return `Gemini could not generate the requested content (HTTP ${status}).`;
+}
+
+function candidateScore(name) {
+  let score = 0;
+  if (/flash-lite/.test(name)) score += 40;
+  else if (/flash(?:$|-)/.test(name)) score += 30;
+  if (!/(preview|experimental|exp)/.test(name)) score += 10;
+  return score;
+}
+
+async function availableModels(key) {
+  if (modelCache.expires > Date.now() && modelCache.names.length) return modelCache.names;
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=100', {
+    headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(15000), cache: 'no-store',
+  });
+  if (!response.ok) return [];
+  const result = await response.json();
+  const names = Array.isArray(result.models) ? result.models
+    .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'))
+    .map(model => String(model.name || '').replace(/^models\//, ''))
+    .filter(name => name.includes('gemini') && !/(image|imagen|tts|audio|live|embedding|aqa)/.test(name))
+    .sort((a, b) => candidateScore(b) - candidateScore(a)) : [];
+  if (names.length) modelCache = { expires: Date.now() + CACHE_MS, names };
+  return names;
 }
 
 function extractText(result) {
@@ -33,18 +60,24 @@ export async function generateGeminiJson(prompt, { maxOutputTokens = 3072, tempe
     'gemini-2.5-flash-lite',
     'gemini-2.5-flash',
   ].filter(Boolean)));
+  // Start discovery alongside the fast attempt. Projects with a narrower
+  // allowlist can fall back to an enabled model without waiting serially.
+  const discoveredModels = availableModels(key).catch(() => []);
+  let discoveryAdded = false;
   let lastError = 'The AI writer is unavailable. Please try again.';
-  for (const model of models) {
+  for (let index = 0; ; index += 1) {
+    if (index >= models.length) {
+      if (discoveryAdded) break;
+      discoveryAdded = true;
+      for (const name of await discoveredModels) if (!models.includes(name)) models.push(name);
+      if (index >= models.length) break;
+    }
+    const model = models[index];
     let response;
     try {
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {
-          maxOutputTokens, temperature, responseMimeType: 'application/json',
-          ...(/^gemini-2\.5-/.test(model)
-            ? { thinkingConfig: { thinkingBudget: 0 } }
-            : (/^gemini-3|latest$/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {})),
-        } }),
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature, responseMimeType: 'application/json' } }),
         signal: AbortSignal.timeout(45000), cache: 'no-store',
       });
     } catch { lastError = 'Gemini is temporarily unavailable. Please try again later.'; continue; }
@@ -62,4 +95,4 @@ export async function generateGeminiJson(prompt, { maxOutputTokens = 3072, tempe
   throw new Error(lastError);
 }
 
-export function resetGeminiModelCache() {}
+export function resetGeminiModelCache() { modelCache = { expires: 0, names: [] }; }
