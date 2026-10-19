@@ -36,9 +36,9 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
     await assert.rejects(generateStoryDraft(finished()),/could not finish/);
   } finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}
 });
-let user={id:'verified-user'}, current=finished(), calls=0, budgetCalls=0, caseSource={ready:false,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',alias:'nightowl',title:'A night',body:'We ended at Grand Central Terminal after the apology crossed the whispering gallery.'}, savedCase=null;
+let user={id:'verified-user'}, current=finished(), calls=0, budgetCalls=0, savedPractice=null, caseSource={ready:false,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',alias:'nightowl',title:'A night',body:'We ended at Grand Central Terminal after the apology crossed the whispering gallery.'}, savedCase=null;
 globalThis.nightActionTest={
-  ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async()=>{},practiceNight:{aliases:['Grand Central']},
+  ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async value=>{savedPractice=value;},practiceNight:{aliases:['Grand Central']},
   generateStoryDraft:async night=>{calls++;assert.deepEqual(night.guesses,finished().guesses);return draft;},
   generateStoryCase:async source=>{assert.deepEqual(source,{id:caseSource.id,alias:caseSource.alias,title:caseSource.title,body:caseSource.body});return {title:'Echo case',brief:'A missed train carried one apology too far.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clock and whispering corners point to Grand Central Terminal.',clues:[]};},
   serverSupabase:async()=>({auth:{getUser:async()=>({data:{user}})},rpc:async(name,args)=>{
@@ -59,6 +59,16 @@ test('reconstruction action requires identity, a finished run and server-fetched
     user={id:'verified-user'};current={...finished(),finished:false};assert.match((await generateNightReconstruction(rules.newYorkDay(),'live')).error,/Finish/);assert.equal(budgetCalls,0);
     current=finished();assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'live')).draft,draft);assert.equal(calls,1);assert.equal(budgetCalls,1);
     assert.match((await generateNightReconstruction('2000-01-01','live')).error,/closed/);assert.equal(calls,1);
+  }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
+});
+test('finished practice players can generate from their hints without an account',async()=>{
+  const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
+  try{
+    user=null;savedPractice=null;current={...finished(),mode:'practice',storyGenerations:1};
+    const result=await generateNightReconstruction(rules.newYorkDay(),'practice');
+    assert.deepEqual(result.draft,draft);assert.equal(result.remaining,1);assert.equal(savedPractice.storyGenerations,2);
+    current={...current,storyGenerations:3};
+    assert.match((await generateNightReconstruction(rules.newYorkDay(),'practice')).error,/three practice drafts/);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
 test('community case generation reads the published story on the server and saves only validated AI output',async()=>{

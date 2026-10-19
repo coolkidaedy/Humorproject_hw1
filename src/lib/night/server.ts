@@ -10,16 +10,16 @@ import type { Community, NightState, GuessAttempt } from './types';
 const processState = globalThis as typeof globalThis & { nightPracticeSecret?: string };
 const practiceSecret = process.env.GAME_SESSION_SECRET || (processState.nightPracticeSecret ??= randomBytes(32).toString('hex'));
 const cookieName = 'wth-practice-v1';
-type Progress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean };
+type Progress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number };
 export async function readPractice(): Promise<Progress> {
-  const initial: Progress = { guesses: [], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false };
+  const initial: Progress = { guesses: [], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: 0 };
   try {
     const token = (await cookies()).get(cookieName)?.value || '';
     const [body, signature] = token.split('.');
     const expected = createHmac('sha256', practiceSecret).update(body || '').digest('hex');
     if (!signature || signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return initial;
     const value = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [] } : initial;
+    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], storyGenerations: Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0 } : initial;
   } catch { return initial; }
 }
 export async function savePractice(progress: Progress) {
@@ -28,7 +28,9 @@ export async function savePractice(progress: Progress) {
   (await cookies()).set(cookieName, `${body}.${signature}`, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 86400 });
 }
 export function practiceState(progress: Progress): NightState {
-  return { ...progress, mode: 'practice', number: 0, title: practiceNight.title, brief: practiceNight.brief,
+  const { storyGenerations: _storyGenerations, ...publicProgress } = progress;
+  void _storyGenerations;
+  return { ...publicProgress, mode: 'practice', number: 0, title: practiceNight.title, brief: practiceNight.brief,
     clues: practiceNight.clues.slice(0, progress.finished ? 4 : progress.revealed), score: deductionScore(progress.revealed, progress.wrong, progress.solved),
     ...(progress.finished ? { answer: practiceNight.answer, explanation: practiceNight.explanation, source: practiceNight.source } : {}),
   };

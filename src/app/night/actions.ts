@@ -21,7 +21,8 @@ export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' 
       if (data?.error) return { error: data.error };
       return { state: data, message: action === 'guess' && !data.finished ? 'Not quite. Follow the evidence. −100 points.' : undefined };
     }
-    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false } : await readPractice();
+    const savedProgress = await readPractice();
+    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations } : savedProgress;
     if (!progress.finished) {
       if (action === 'reveal') progress.revealed = Math.min(4, progress.revealed + 1);
       if (action === 'giveup') progress.finished = true;
@@ -68,24 +69,40 @@ export async function refreshCommunity(day: string) {
 export async function generateNightReconstruction(day: string, mode: 'live' | 'practice') {
   if (day !== newYorkDay() || !['live', 'practice'].includes(mode)) return { error: 'This night has closed. Refresh for today’s case.' };
   try {
-    const supabase = await serverSupabase();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return { error: 'Sign in to let AI reconstruct your night. Your progress stays here.' };
+    let supabase: Awaited<ReturnType<typeof serverSupabase>> | null = null;
+    let signedIn = false;
+    try {
+      supabase = await serverSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      signedIn = Boolean(user);
+    } catch { /* Practice generation remains available without the community connection. */ }
+    if (mode === 'live' && (!supabase || !signedIn)) return { error: 'Sign in to let AI reconstruct your ranked night.' };
     let night: NightState;
-    if (mode === 'practice') night = practiceState(await readPractice());
+    let practiceProgress: Awaited<ReturnType<typeof readPractice>> | null = null;
+    if (mode === 'practice') { practiceProgress = await readPractice(); night = practiceState(practiceProgress); }
     else {
-      const { data, error } = await supabase.rpc('night_play', { action_name: 'state', guess_text: '' });
+      const { data, error } = await supabase!.rpc('night_play', { action_name: 'state', guess_text: '' });
       if (error || !data || data.error) return { error: 'Couldn’t retrieve your guess trail. Please retry.' };
       night = data;
     }
     if (!night.finished || !night.answer) return { error: 'Finish the mystery to unlock your AI reconstruction.' };
     if (!process.env.GEMINI_API_KEY?.trim()) return { error: 'AI story generation is not configured on this deployment yet. Your draft is safe.' };
     // Read context from the server, never accept forged guesses or clue counts from the client.
-    const { data: budget, error: budgetError } = await supabase.rpc('night_reserve_story_generation');
-    if (budgetError) return { error: 'The story writer is not ready on this deployment yet. Your draft is safe.' };
-    if (budget?.error) return { error: budget.error as string };
+    let remaining: number;
+    if (signedIn && supabase) {
+      const { data: budget, error: budgetError } = await supabase.rpc('night_reserve_story_generation');
+      if (budgetError) return { error: 'The story writer is not ready on this deployment yet. Your draft is safe.' };
+      if (budget?.error) return { error: budget.error as string };
+      remaining = budget.remaining as number;
+    } else {
+      if (!practiceProgress) return { error: 'Sign in to generate a story for this case.' };
+      if (practiceProgress.storyGenerations >= 3) return { error: 'You’ve used today’s three practice drafts. You can still edit your current story.' };
+      practiceProgress.storyGenerations += 1;
+      await savePractice(practiceProgress);
+      remaining = 3 - practiceProgress.storyGenerations;
+    }
     const draft = await generateStoryDraft(night);
-    return { draft, remaining: budget.remaining as number };
+    return { draft, remaining };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return { error: /^(The AI |The story writer )/.test(message) ? message : 'Story generation was interrupted. Your current draft is unchanged; please retry.' };

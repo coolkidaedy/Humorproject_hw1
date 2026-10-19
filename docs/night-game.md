@@ -37,6 +37,7 @@ The initial destination pool contains two sourced locations in `src/lib/night/de
 - Voting and submissions close at midnight America/New_York, enforced by the database. Refresh is required when a tab crosses into the next day.
 - Story order is stable but varied per viewer, not sorted by popularity. Today's stories are hidden from unfinished players. Tonight and all-time leaderboard tabs contain only actual published players. Ties are resolved by handle for tonight and by completed nights then handle for all time.
 - Guests can play the practice case; authentication is required for ranked actions. Practice drafts are separate from live drafts and do not import into the leaderboard.
+- Guests can also generate up to three AI drafts from the practice hints each New York day. The signed practice cookie enforces that quota without requiring an account; publishing, voting and ranked play still require authentication.
 
 ## Validation
 
