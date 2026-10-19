@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { authOrigin } from "@/lib/auth-origin";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { readProfile, profileComplete } from "@/lib/profile";
 export async function proxy(request: NextRequest) {
@@ -22,14 +23,14 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   let destination: string | undefined;
   if (!user && (path === "/profile" || path === "/protected")) destination = "/login";
-  if (user && (path === "/" || path === "/login" || path === "/protected")) {
+  if (user && (path === "/login" || path === "/protected")) {
     try {
       if (!profileComplete(await readProfile(supabase, user.id))) destination = "/profile";
       else if (path === "/login") destination = "/protected";
     } catch { destination = "/profile"; }
   }
   if (destination) {
-    const next = NextResponse.redirect(new URL(destination, request.url));
+    const next = NextResponse.redirect(new URL(destination, authOrigin(request)));
     response.cookies.getAll().forEach(cookie => next.cookies.set(cookie));
     next.headers.set("Cache-Control", "private, no-store");
     return next;

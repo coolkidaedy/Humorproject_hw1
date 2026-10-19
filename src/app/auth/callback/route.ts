@@ -1,9 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { authOrigin } from "@/lib/auth-origin";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { profileComplete, readProfile } from "@/lib/profile";
 export async function GET(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/login?error=callback", request.url));
+  const response = NextResponse.redirect(new URL("/login?error=callback", authOrigin(request)));
   response.headers.set("Cache-Control", "private, no-store");
   const code = request.nextUrl.searchParams.get("code");
   if (!code || request.nextUrl.searchParams.has("error")) return response;
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Missing rows are completed via the profile form, without overwriting trigger data.
     let destination = "/profile";
     try { if (profileComplete(await readProfile(supabase, data.user.id))) destination = "/protected"; } catch { /* Profile page offers retry. */ }
-    response.headers.set("Location", new URL(destination, request.url).toString());
+    response.headers.set("Location", new URL(destination, authOrigin(request)).toString());
   } catch { /* Do not log authorization codes, tokens, or provider errors. */ }
   return response;
 }

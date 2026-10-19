@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { serverSupabase } from "@/lib/supabase/server";
-import { logout } from "@/app/auth/actions";
+import Link from 'next/link';
+import { serverSupabase } from '@/lib/supabase/server';
+import { logout } from '@/app/auth/actions';
 export async function Navigation() {
-  const supabase = await serverSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-  return <nav aria-label="Main navigation" className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-6 border-b border-current/15 px-6 py-5 text-sm font-semibold"><Link href="/">Restaurants</Link><Link href="/captions">Campus captions</Link>{user ? <><Link href="/protected">Members</Link><Link href="/profile">Profile</Link><form action={logout} className="ml-auto"><button className="cursor-pointer underline underline-offset-4">Log out</button></form></> : <Link href="/login" className="ml-auto">Log in</Link>}</nav>;
+  let loggedIn = false;
+  try { const supabase = await serverSupabase(); const { data: { user } } = await supabase.auth.getUser(); loggedIn = Boolean(user); } catch { /* Public game remains playable. */ }
+  return <header className="site-header"><Link href="/" className="wordmark" aria-label="Where the hell are we home"><span className="brand-cross">✳</span> WHERE THE<br /><span className="wordmark-bottom">HELL ARE WE?</span></Link><span className="header-coordinate">40°43′ N &nbsp; 73°59′ W<br /><b>NEW YORK, AFTER HOURS.</b></span><nav aria-label="Main navigation" className="site-nav"><Link href="/" className="nav-play">The daily</Link><Link href="/#stories">The stories</Link><Link href="/#leaderboard">Leaderboard</Link>{loggedIn ? <><Link href="/protected" className="account-link">Members ↗</Link><form action={logout}><button className="signout">Log out</button></form></> : <Link href="/protected" className="account-link">Sign in ↗</Link>}</nav></header>;
 }

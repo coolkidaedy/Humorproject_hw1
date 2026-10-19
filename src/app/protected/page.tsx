@@ -1,6 +1,13 @@
-import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import Link from 'next/link';
+import { requireUser } from '@/lib/auth';
+export const dynamic = 'force-dynamic';
 export default async function Protected() {
   const { profile } = await requireUser(true);
-  return <main className="mx-auto w-full max-w-5xl px-6 py-16"><p className="mb-4 text-sm font-semibold uppercase tracking-widest text-emerald-700">Members</p><h1 className="text-4xl font-bold">Welcome, {profile!.first_name}.</h1><p className="my-6">Your session has been verified on the server.</p><Link href="/profile" className="underline underline-offset-4">Edit your profile</Link></main>;
+  return <main className="members-page">
+    <span className="eyebrow"><span className="live-dot"/> THE NIGHT SHIFT / MEMBERS ONLY</span>
+    <h1>You’re on<br/><em>the inside.</em></h1>
+    <p>Welcome back, {profile!.first_name}. Your next questionable night starts here.</p>
+    <div className="members-actions"><Link href="/" className="primary-button">Play the daily mystery →</Link><Link href="/profile" className="text-button">Edit your profile ↗</Link></div>
+    <div className="member-pass"><span>AFTER-HOURS ACCESS</span><strong>{profile!.first_name} {profile!.last_name}</strong><p>Members-only area · Signed in</p><span>NEW YORK. YOUR SIDE OF THE STORY.</span></div>
+  </main>;
 }

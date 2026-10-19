@@ -3,8 +3,8 @@ import "./globals.css";
 import { Navigation } from "@/components/navigation";
 
 export const metadata: Metadata = {
-  title: "NYC Restaurant List",
-  description: "Explore NYC restaurants by neighborhood and cuisine.",
+  title: "Where the hell are we? — A daily NYC mystery",
+  description: "Piece together a New York night. Find the spot, tell the story, and let the city pick its favorite.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

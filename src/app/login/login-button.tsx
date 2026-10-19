@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { oauthCallbackUrl } from "@/lib/auth-urls";
 import { browserSupabase } from "@/lib/supabase/client";
 export function LoginButton() {
   const [error, setError] = useState("");
@@ -7,7 +8,7 @@ export function LoginButton() {
   async function login() {
     setPending(true); setError("");
     try {
-      const { error } = await browserSupabase().auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/auth/callback` } });
+      const { error } = await browserSupabase().auth.signInWithOAuth({ provider: "google", options: { redirectTo: oauthCallbackUrl(window.location.origin) } });
       if (error) throw error;
     } catch { setError("Unable to start Google login. Please try again."); setPending(false); }
   }

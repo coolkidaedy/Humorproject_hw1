@@ -1,0 +1,26 @@
+[
+  {
+    "answer": "Grand Central Terminal",
+    "aliases": ["Grand Central Terminal", "Grand Central", "Grand Central Station", "GCT"],
+    "source": "https://grandcentralterminal.com/what-to-see/",
+    "facts": [
+      { "id": "whisper", "text": "The whispering gallery has tiled arches; people in opposite corners can hear each other speaking quietly." },
+      { "id": "clock", "text": "The information booth in the Main Concourse has a four-faced clock." },
+      { "id": "address", "text": "It is a railway terminal at 89 East 42nd Street in Manhattan." },
+      { "id": "vanderbilt", "text": "Oak leaf and acorn decorations reference the Vanderbilt family, who financed the terminal." }
+    ],
+    "explanation": "The whispering gallery, the information booth’s four-faced clock, and East 42nd Street all point to Grand Central Terminal."
+  },
+  {
+    "answer": "Washington Square Park",
+    "aliases": ["Washington Square Park", "Washington Square", "WSP"],
+    "source": "https://nycgovparks.org/parks/washington-square-park",
+    "facts": [
+      { "id": "arch", "text": "The park has a marble arch honoring George Washington." },
+      { "id": "fountain", "text": "Its fountain is a popular meeting place and is older than the arch." },
+      { "id": "chess", "text": "The park has a tradition of chess playing." },
+      { "id": "address", "text": "It is in Manhattan, at Fifth Avenue, Waverly Place, West 4th Street and Macdougal Street." }
+    ],
+    "explanation": "The Washington Arch, the fountain, chess players, and the streets around the park identify Washington Square Park."
+  }
+]

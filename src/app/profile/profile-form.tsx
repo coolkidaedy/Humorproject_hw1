@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { Profile } from "@/lib/profile";
 import { saveProfile } from "./actions";
@@ -48,7 +49,7 @@ export function ProfileForm({ profile, photoUrl, photoError }: { profile: Profil
       <label className="block text-sm font-semibold">Last name<input name="last_name" autoComplete="family-name" required maxLength={100} defaultValue={profile?.last_name ?? ""} className={inputClass} /></label>
     </div>
     {(fileError || state.error) && <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">{fileError || state.error}</p>}
-    {state.success && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">{state.success}</p>}
+    {state.success && <div><p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">{state.success}</p><Link href="/protected" className="mt-4 inline-flex font-semibold underline underline-offset-4">Continue to members →</Link></div>}
     <button disabled={pending || Boolean(fileError)} className="rounded-full bg-emerald-700 px-6 py-3 font-semibold text-white disabled:opacity-50">{pending ? "Saving…" : "Save profile"}</button>
   </form>;
 }
