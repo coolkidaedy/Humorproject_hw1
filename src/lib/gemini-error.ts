@@ -16,5 +16,5 @@ export function geminiError(status: number, body: unknown): string {
     return "Gemini rejected the request configuration. Check the model and API key configuration in Vercel. (400)";
   if (status >= 500)
     return "Gemini is temporarily unavailable. Please try again later. (Provider server error)";
-  return `Gemini could not generate a caption (HTTP ${status}). Check the deployment’s runtime logs.`;
+  return `Gemini could not generate the requested content (HTTP ${status}). Check the deployment’s runtime logs.`;
 }

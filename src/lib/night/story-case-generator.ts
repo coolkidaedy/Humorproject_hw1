@@ -1,4 +1,5 @@
 import type { Clue } from './types';
+import { geminiError } from '../gemini-error';
 
 export type StoryCaseSource = { id: string; alias: string; title: string; body: string };
 export type GeneratedStoryCase = {
@@ -47,7 +48,7 @@ export function validateStoryCase(value: unknown): GeneratedStoryCase {
 export async function generateStoryCase(story: StoryCaseSource): Promise<GeneratedStoryCase> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('AI case generation is not configured on this deployment yet.');
-  const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-3.5-flash';
+  const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-3.6-flash';
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
@@ -55,8 +56,8 @@ export async function generateStoryCase(story: StoryCaseSource): Promise<Generat
     signal: AbortSignal.timeout(40000), cache: 'no-store',
   });
   if (!response.ok) {
-    if (response.status === 429) throw new Error('The case writer is busy. Try again shortly.');
-    throw new Error('The case writer is unavailable. Please try again later.');
+    const body = await response.json().catch(() => null);
+    throw new Error(geminiError(response.status, body));
   }
   const result = await response.json();
   const candidate = result.candidates?.[0];

@@ -5,7 +5,9 @@ import ts from 'typescript';
 const compile=text=>`data:text/javascript;base64,${Buffer.from(ts.transpileModule(text,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText).toString('base64')}`;
 const load=async path=>import(compile(readFileSync(new URL(path,import.meta.url),'utf8')));
 const rules=await load('../src/lib/night/rules.ts');
-const {storyPrompt,validateStoryDraft,generateStoryDraft}=await load('../src/lib/night/story-generator.ts');
+const {geminiError}=await load('../src/lib/gemini-error.ts');
+const storyGeneratorSource=readFileSync(new URL('../src/lib/night/story-generator.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
+const {storyPrompt,validateStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\n${storyGeneratorSource}`));
 const finished=()=>({day:rules.newYorkDay(),mode:'live',number:1,title:'One quick stop',brief:'A very questionable night.',clues:[{kind:'message',text:'A confession in opposite corners.'},{kind:'receipt',text:'Meet us by the four-faced clock.'}],revealed:2,wrong:1,finished:true,solved:true,score:700,answer:'Grand Central Terminal',explanation:'A whispering gallery and a four-faced clock.',guesses:[{place:'Times Square',clueCount:1,correct:false},{place:'Grand Central',clueCount:2,correct:true}]});
 const draft={title:'The wall knew first',body:'We were convinced we had reached Times Square. Then the wall started carrying our secrets. By the second clue, Grand Central was the only explanation for both the clock and our remarkably public confession.'};
 test('story prompt uses actual guesses in order and does not invent guesses for a skipped case',()=>{
@@ -31,7 +33,7 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
     assert.deepEqual(await generateStoryDraft(finished()),draft);
     assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
-    await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/unavailable/.test(error.message));
+    await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
     globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'MAX_TOKENS'}]}));
     await assert.rejects(generateStoryDraft(finished()),/could not finish/);
   } finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}

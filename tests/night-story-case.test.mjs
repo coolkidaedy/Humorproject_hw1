@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 
+const errorSource = readFileSync(new URL('../src/lib/gemini-error.ts', import.meta.url), 'utf8');
+const { geminiError } = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(errorSource,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText).toString('base64')}`);
 const source = readFileSync(new URL('../src/lib/night/story-case-generator.ts', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText).toString('base64')}`;
+const moduleUrl = `data:text/javascript;base64,${Buffer.from(`const geminiError=${geminiError.toString()};\n${ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText}`).toString('base64')}`;
 const { storyCasePrompt, validateStoryCase, generateStoryCase } = await import(moduleUrl);
 const story = { id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', alias:'nightowl', title:'The clock made us confess', body:'We mistook Times Square for Grand Central Terminal, where the whispering wall carried the apology to the other corner.' };
 const generated = { title:'The apology had an echo', brief:'A confession crossed the room before anyone found the train.', answer:'Grand Central Terminal', aliases:['Grand Central','GCT'], explanation:'The train reference, opposite corners, and a message that travels across the room point to the whispering gallery at Grand Central.', clues:[
@@ -36,6 +38,6 @@ test('case generation strips thought content and keeps provider failures private
     globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'private reasoning'},{text:JSON.stringify(generated)}]}}]}));
     assert.deepEqual((await generateStoryCase(story)).answer,'Grand Central Terminal');
     globalThis.fetch=async()=>new Response('private provider detail',{status:403});
-    await assert.rejects(generateStoryCase(story),error=>/unavailable/.test(error.message)&&!error.message.includes('private provider detail'));
+    await assert.rejects(generateStoryCase(story),error=>/denied access/.test(error.message)&&!error.message.includes('private provider detail'));
   } finally { globalThis.fetch=originalFetch; if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey; }
 });
