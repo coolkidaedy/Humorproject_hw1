@@ -2,6 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { serverSupabase } from '@/lib/supabase/server';
+import { readProfile } from '@/lib/profile';
 import { practiceNight } from './practice';
 import { deductionScore, newYorkDay } from './rules';
 import type { Community, NightState, GuessAttempt } from './types';
@@ -39,28 +40,31 @@ export function practiceState(progress: PracticeProgress): NightState {
     ...(progress.finished ? { answer: episode.answer, explanation: episode.explanation, source: episode.source } : {}),
   };
 }
-export async function loadNight(): Promise<{ state: NightState; loggedIn: boolean; playerId: string | null }> {
+export async function loadNight(): Promise<{ state: NightState; loggedIn: boolean; playerId: string | null; playerName: string }> {
   let loggedIn = false;
   let playerId: string | null = null;
+  let playerName = '';
   try {
     const supabase = await serverSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     loggedIn = Boolean(user);
     playerId = user?.id || null;
     if (user) {
+      try { playerName = (await readProfile(supabase, user.id))?.first_name?.trim() || ''; } catch { /* The player can enter a name in the story form. */ }
       const generated = await readPractice();
-      if (generated.episode) return { state: practiceState(generated), loggedIn, playerId };
+      if (generated.episode) return { state: practiceState(generated), loggedIn, playerId, playerName };
       const { data, error } = await supabase.rpc('night_play', { action_name: 'state', guess_text: '' });
-      if (!error && data && !data.error) return { state: data as NightState, loggedIn, playerId };
+      if (!error && data && !data.error) return { state: data as NightState, loggedIn, playerId, playerName };
     }
   } catch { /* A playable, explicitly unranked episode remains available. */ }
-  return { state: practiceState(await readPractice()), loggedIn, playerId };
+  return { state: practiceState(await readPractice()), loggedIn, playerId, playerName };
 }
 export async function loadCommunity(day: string): Promise<Community> {
   try {
     const supabase = await serverSupabase();
     const { data, error } = await supabase.rpc('night_community', { requested_day: day });
     if (!error && data) return { ...data, available: true };
+    if (error) console.error('[night-community] Supabase RPC failed', JSON.stringify({ code: error.code, message: error.message }));
   } catch { /* No invented users, votes or rankings in the fallback. */ }
   return { stories: [], leaders: [], available: false, error: 'The community feed is temporarily unavailable. Your draft is still safe in this browser.' };
 }

@@ -86,7 +86,7 @@ export async function refreshCommunity(day: string) {
   return loadCommunity(day);
 }
 
-export async function generateNightReconstruction(day: string, mode: 'live' | 'practice') {
+export async function generateNightReconstruction(day: string, mode: 'live' | 'practice', writerName: string) {
   if (day !== newYorkDay() || !['live', 'practice'].includes(mode)) return { error: 'This night has closed. Refresh for today’s case.' };
   try {
     let night: NightState;
@@ -99,7 +99,7 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
     }
     if (!night.finished || !night.answer) return { error: 'Finish the mystery to unlock your AI reconstruction.' };
     if (!process.env.GEMINI_API_KEY?.trim()) return { error: 'AI story generation is not configured on this deployment yet. Your draft is safe.' };
-    const draft = await generateStoryDraft(night);
+    const draft = await generateStoryDraft(night, writerName);
     return { draft };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

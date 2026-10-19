@@ -13,13 +13,14 @@ const {storyPrompt,validateStoryDraft,fallbackStoryDraft,generateStoryDraft}=awa
 const finished=()=>({day:rules.newYorkDay(),mode:'live',number:1,title:'One quick stop',brief:'A very questionable night.',clues:[{kind:'message',text:'A confession in opposite corners.'},{kind:'receipt',text:'Meet us by the four-faced clock.'}],revealed:2,wrong:1,finished:true,solved:true,score:700,answer:'Grand Central Terminal',explanation:'A whispering gallery and a four-faced clock.',guesses:[{place:'Times Square',clueCount:1,correct:false},{place:'Grand Central',clueCount:2,correct:true}]});
 const draft={title:'The wall knew first',body:'We were convinced we had reached Times Square. Then the wall started carrying our secrets. By the second clue, Grand Central was the only explanation for both the clock and our remarkably public confession.'};
 test('story prompt sends the revealed clues and actual guesses',()=>{
-  const prompt=storyPrompt(finished());
+  const prompt=storyPrompt(finished(),'Aedin');
   assert.match(prompt,/A confession in opposite corners/);
   assert.match(prompt,/Meet us by the four-faced clock/);
   assert.match(prompt,/Times Square/);
   assert.match(prompt,/Grand Central Terminal/);
-  assert.throws(()=>storyPrompt({...finished(),finished:false}));
-  assert.match(storyPrompt({...finished(),guesses:[],solved:false}),/PLAYER GUESSES:\n\[\]/);
+  assert.match(prompt,/narrator is named Aedin/);
+  assert.throws(()=>storyPrompt({...finished(),finished:false},'Aedin'));
+  assert.match(storyPrompt({...finished(),guesses:[],solved:false},'Aedin'),/PLAYER GUESSES:\n\[\]/);
 });
 test('story draft validation enforces editor limits and exposes only title and body',()=>{
   assert.deepEqual(validateStoryDraft({...draft,extra:'ignore'}),draft);
@@ -37,15 +38,17 @@ test('AI reconstruction discovers one enabled model, makes one generation reques
   try {
     resetGeminiModelCache();
     globalThis.fetch=async(url,options)=>{requestedUrls.push(String(url));if(String(url).includes('?pageSize='))return new Response(JSON.stringify({models:[{name:'models/gemini-test-flash',supportedGenerationMethods:['generateContent']}]}));sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
-    assert.deepEqual(await generateStoryDraft(finished()),draft);
+    const namedDraft=await generateStoryDraft(finished(),'Aedin');
+    assert.equal(namedDraft.title,draft.title);assert.match(namedDraft.body,/Aedin/);
     assert.ok(requestedUrls.some(url=>url.includes('/models?pageSize=')));
     assert.equal(requestedUrls.filter(url=>url.includes(':generateContent')).length,1);
     assert.ok(requestedUrls.some(url=>url.includes('gemini-test-flash:generateContent')));
     assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
-    await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
+    await assert.rejects(generateStoryDraft(finished(),'Aedin'),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
     globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));
-    await assert.rejects(generateStoryDraft(finished()),/could not finish/);
+    await assert.rejects(generateStoryDraft(finished(),'Aedin'),/could not finish/);
+    await assert.rejects(generateStoryDraft(finished(),'1'),/Add your name/);
   } finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}
 });
 let user={id:'verified-user'}, current=finished(), calls=0, budgetCalls=0, savedPractice=null, caseSource={ready:false,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',alias:'nightowl',title:'A night',body:'We ended at Grand Central Terminal after the apology crossed the whispering gallery.'}, savedCase=null;
@@ -54,7 +57,7 @@ globalThis.nightActionTest={
   fallbackStoryDraft:()=>draft,
   fallbackStoryCase:()=>({title:'Fallback case',brief:'Four details survived the night and point to one last stop.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clues point to Grand Central Terminal.',clues:[]}),
   generateFreshEpisode:async (day,_seed,avoid)=>{assert.ok(avoid.includes('Grand Central Terminal'));return {day,title:'The arch after midnight',brief:'Four details from a very questionable walk through downtown.',answer:'Washington Square Park',aliases:['Washington Square Park','Washington Square'],explanation:'The arch, fountain, and chess tables identify Washington Square Park.',source:'https://www.google.com/maps',clues:[{kind:'message',time:'10:00 PM',label:'TEXT',text:'Meet by the marble arch after the fountain.'}]};},
-  generateStoryDraft:async night=>{calls++;assert.deepEqual(night.guesses,finished().guesses);return draft;},
+  generateStoryDraft:async (night,name)=>{calls++;assert.deepEqual(night.guesses,finished().guesses);assert.equal(name,'Aedin');return draft;},
   generateStoryCase:async source=>{assert.deepEqual(source,{id:caseSource.id,alias:caseSource.alias,title:caseSource.title,body:caseSource.body});return {title:'Echo case',brief:'A missed train carried one apology too far.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clock and whispering corners point to Grand Central Terminal.',clues:[]};},
   serverSupabase:async()=>({auth:{getUser:async()=>({data:{user}})},rpc:async(name,args)=>{
     if(name==='night_reserve_story_generation'){budgetCalls++;return {data:{remaining:4}};}
@@ -70,18 +73,18 @@ const {generateNewPracticeCase,generateNightReconstruction,prepareStoryCase,play
 test('reconstruction action uses the server-fetched finished run without an extra quota RPC',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{
-    user=null;current={...finished(),finished:false};assert.match((await generateNightReconstruction(rules.newYorkDay(),'live')).error,/Finish/);assert.equal(calls,0);
-    current=finished();assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'live')).draft,draft);assert.equal(calls,1);assert.equal(budgetCalls,0);
-    assert.match((await generateNightReconstruction('2000-01-01','live')).error,/closed/);assert.equal(calls,1);
+    user=null;current={...finished(),finished:false};assert.match((await generateNightReconstruction(rules.newYorkDay(),'live','Aedin')).error,/Finish/);assert.equal(calls,0);
+    current=finished();assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'live','Aedin')).draft,draft);assert.equal(calls,1);assert.equal(budgetCalls,0);
+    assert.match((await generateNightReconstruction('2000-01-01','live','Aedin')).error,/closed/);assert.equal(calls,1);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
 test('finished practice players can generate from their hints without an account',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{
     user=null;savedPractice=null;current={...finished(),mode:'practice',storyGenerations:1};
-    const result=await generateNightReconstruction(rules.newYorkDay(),'practice');
+    const result=await generateNightReconstruction(rules.newYorkDay(),'practice','Aedin');
     assert.deepEqual(result.draft,draft);assert.equal(savedPractice,null);
-    assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'practice')).draft,draft);
+    assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'practice','Aedin')).draft,draft);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
 test('a new practice case resets play and keeps a real NYC answer with its clues',async()=>{

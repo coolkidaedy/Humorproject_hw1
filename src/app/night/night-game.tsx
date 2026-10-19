@@ -46,7 +46,7 @@ function EvidenceBoard({ firstClue }: { firstClue: Clue }) {
 function Evidence({ clue, index }: { clue: Clue; index: number }) {
   return <article className={`clue-artifact artifact-${clue.kind}`} key={index}><div className="artifact-heading"><span>0{index + 1} / {clue.label}</span><time>{clue.time}</time></div>{clue.kind === 'message' ? <div className="clue-chat">{clue.text.split('\n').filter(Boolean).map((line, i) => <p key={i} className={i % 2 ? 'reply' : ''}>{line}</p>)}</div> : <p className="artifact-text">{clue.text}</p>}<div className="artifact-foot">{clue.kind === 'receipt' ? 'FOUND: LEFT COAT POCKET' : clue.kind === 'note' ? 'RECOVERED DRAFT · NEVER SENT' : clue.kind === 'dispatch' ? 'LOCATION SIGNAL RECOVERED' : 'SCREENSHOT ADDED TO EVIDENCE'}<span>↗</span></div></article>;
 }
-export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { initial: NightState; initialCommunity: Community; loggedIn: boolean; playerId: string | null }) {
+export function NightGame({ initial, initialCommunity, loggedIn, playerId, playerName }: { initial: NightState; initialCommunity: Community; loggedIn: boolean; playerId: string | null; playerName: string }) {
   const router = useRouter();
   const [night, setNight] = useState(initial);
   const [community, setCommunity] = useState(initialCommunity);
@@ -58,6 +58,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [alias, setAlias] = useState('');
+  const [writerName, setWriterName] = useState(playerName);
   const [draftReady, setDraftReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -79,16 +80,16 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       try {
         const guestKey = `wth-draft-v2-guest-${night.mode}-${night.day}`;
         const value = JSON.parse(localStorage.getItem(storageKey) || (loggedIn ? localStorage.getItem(guestKey) : '') || 'null');
-        if (value) { setTitle(value.title || ''); setBody(value.body || ''); setAlias(value.alias || ''); setGenerated(Boolean(value.generated)); }
+        if (value) { setTitle(value.title || ''); setBody(value.body || ''); setAlias(value.alias || ''); setWriterName(value.writerName || playerName); setGenerated(Boolean(value.generated)); }
       } catch { /* Storage may be blocked. */ }
       setDraftReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [storageKey, loggedIn, night.mode, night.day]);
+  }, [storageKey, loggedIn, night.mode, night.day, playerName]);
   useEffect(() => {
     if (!draftReady) return;
-    try { localStorage.setItem(storageKey, JSON.stringify({ title, body, alias, generated })); } catch { /* Explicit save reports unavailable storage. */ }
-  }, [title, body, alias, generated, draftReady, storageKey]);
+    try { localStorage.setItem(storageKey, JSON.stringify({ title, body, alias, writerName, generated })); } catch { /* Explicit save reports unavailable storage. */ }
+  }, [title, body, alias, writerName, generated, draftReady, storageKey]);
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible') startTransition(async () => { setCommunity(await refreshCommunity(night.day)); }); };
     document.addEventListener('visibilitychange', refresh);
@@ -98,7 +99,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   const generateDraft = useCallback(async () => {
     setGenerating(true); setStoryMessage('');
     try {
-      const result = await generateNightReconstruction(night.day, night.mode);
+      const result = await generateNightReconstruction(night.day, night.mode, writerName);
       if (result.error) setStoryMessage(result.error);
       else if (result.draft) {
         console.info('[night-ai:story] Client result', result.draft);
@@ -107,8 +108,9 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       }
     } catch { setStoryMessage('The story writer lost the thread. Your current draft is unchanged.'); }
     finally { setGenerating(false); }
-  }, [night.day, night.mode]);
+  }, [night.day, night.mode, writerName]);
   function requestStoryDraft() {
+    if (!/^[\p{L}][\p{L}' -]{0,38}[\p{L}]$/u.test(writerName.trim())) { setStoryMessage('Add your name before generating the story.'); return; }
     storyRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
     void generateDraft();
   }
@@ -156,7 +158,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
     e.preventDefault(); setStoryMessage('');
     if (!validStory(title, body, alias)) { setStoryMessage('Add a title, 80–1,200 characters of story, and a valid handle. Blank space doesn’t count.'); return; }
     if (!loggedIn) {
-      try { localStorage.setItem(storageKey, JSON.stringify({ title, body, alias, generated })); } catch { /* The visible editor still keeps the draft. */ }
+      try { localStorage.setItem(storageKey, JSON.stringify({ title, body, alias, writerName, generated })); } catch { /* The visible editor still keeps the draft. */ }
       router.push('/login');
       return;
     }
@@ -201,6 +203,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
                 {(night.guesses || []).length ? night.guesses.map((attempt, i) => <span key={i} className={attempt.correct ? 'correct' : ''}>{attempt.place}<b aria-label={attempt.correct ? 'correct' : 'wrong'}>{attempt.correct ? '✓' : '×'}</b></span>) : <span>No guesses recorded</span>}
               </div>
               <div className="generation-tools">
+                <label className="writer-name-input" htmlFor="writer-name"><span>Story name</span><input id="writer-name" value={writerName} onChange={e => setWriterName(e.target.value)} placeholder="Your first name" minLength={2} maxLength={40} disabled={generating || pending}/></label>
                 <button type="button" className="generate-story-button" disabled={generating || pending} onClick={requestStoryDraft}>
                   <span className={generating ? 'writing-star' : ''}>✳</span>{generating ? 'Gemini is writing…' : generated ? 'Write another version' : 'Generate my story'}
                 </button>
@@ -219,7 +222,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
           <p className="action-feedback" role="status">{storyMessage}</p>
           {night.mode === 'practice' && body && <button className="clear-draft" disabled={generating} onClick={clearPracticeDraft}>Clear draft</button>}
         </div><div className="voting-explainer"><span className="outline-star">✳</span><h3>The city<br/>gets the last word.</h3><p>Vote for the best story. Every vote gives its author 50 points.</p></div></div>}
-      {night.finished && <div className="community-stories"><div className="feed-top"><div className="feed-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Everyone’s version <span>{community.stories.length}</span></button><button className={filter === 'mine' ? 'active' : ''} onClick={() => setFilter('mine')}>My story</button></div><button className="refresh-button" disabled={pending} onClick={() => startTransition(async () => setCommunity(await refreshCommunity(night.day)))}>Refresh ↻</button></div><p role="status" className="action-feedback">{voteMessage || caseMessage}</p>{stories.length ? <div className="story-grid">{stories.map(story => <article className="player-story" key={story.id}><div className="player-story-top"><span>@{story.alias}</span><span>{story.mine ? 'YOUR VERSION' : story.sourceKind === 'generated' ? 'AI CASE STORY' : 'DAILY STORY'}</span></div><h3>{story.title}</h3><p>{story.body}</p><button className="story-to-case" disabled={Boolean(caseGenerating)} onClick={() => void openStoryCase(story)}><span>{caseGenerating === story.id ? 'GENERATING EVIDENCE' : story.playable ? 'COMMUNITY CASE READY' : 'AI CASE BUILDER'}</span><b>{caseGenerating === story.id ? 'Turning this night into clues…' : story.playable ? 'Play this story →' : 'Turn this story into a game ✳'}</b></button><div className="player-story-bottom"><span>{story.votes} {story.votes === 1 ? 'vote' : 'votes'} · {story.votes * 50} pts</span><button disabled={pending || story.mine || !loggedIn} aria-pressed={story.voted} onClick={() => vote(story.id)} className={story.voted ? 'voted' : ''}><Symbol name="star" size={16}/>{story.voted ? 'Your best night' : story.mine ? 'Your story' : loggedIn ? 'Best night' : 'Sign in to vote'}</button></div></article>)}</div> : <div className="empty-feed"><span>“ ”</span><h3>{filter === 'mine' ? 'Your version is still unwritten.' : 'Every legendary night needs a first storyteller.'}</h3><p>{community.available ? 'Post your version. Come back to read the other stories and cast your vote.' : community.error}</p></div>}</div>}
+      <div className="community-stories"><div className="feed-top"><div className="feed-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Everyone’s version <span>{community.stories.length}</span></button><button className={filter === 'mine' ? 'active' : ''} onClick={() => setFilter('mine')}>My story</button></div><button className="refresh-button" disabled={pending} onClick={() => startTransition(async () => setCommunity(await refreshCommunity(night.day)))}>Refresh ↻</button></div><p role="status" className="action-feedback">{voteMessage || caseMessage}</p>{stories.length ? <div className="story-grid">{stories.map(story => <article className="player-story" key={story.id}><div className="player-story-top"><span>@{story.alias}</span><span>{story.mine ? 'YOUR VERSION' : story.sourceKind === 'generated' ? 'AI CASE STORY' : 'DAILY STORY'}</span></div><h3>{story.title}</h3><p>{story.body}</p><button className="story-to-case" disabled={Boolean(caseGenerating)} onClick={() => void openStoryCase(story)}><span>{caseGenerating === story.id ? 'GENERATING EVIDENCE' : story.playable ? 'COMMUNITY CASE READY' : 'AI CASE BUILDER'}</span><b>{caseGenerating === story.id ? 'Turning this night into clues…' : story.playable ? 'Play this story →' : 'Turn this story into a game ✳'}</b></button><div className="player-story-bottom"><span>{story.votes} {story.votes === 1 ? 'vote' : 'votes'} · {story.votes * 50} pts</span><button disabled={pending || story.mine} aria-pressed={story.voted} onClick={() => loggedIn ? vote(story.id) : router.push('/login')} className={story.voted ? 'voted' : ''}><Symbol name="star" size={16}/>{story.voted ? 'Your best night' : story.mine ? 'Your story' : loggedIn ? 'Best night' : 'Sign in to vote'}</button></div></article>)}</div> : <div className="empty-feed"><span>“ ”</span><h3>{filter === 'mine' ? 'Your version is still unwritten.' : 'Every legendary night needs a first storyteller.'}</h3><p>{community.available ? 'Post your version. Come back to read the other stories and cast your vote.' : community.error}</p></div>}</div>
     </section>
     <section className="leaderboard-section" id="leaderboard" aria-labelledby="leaderboard-title"><div className="leaderboard-intro"><div className="section-kicker">03 — LOCAL LEGENDS</div><h2 id="leaderboard-title">Know the city.<br/><em>Own the night.</em></h2><p>Good detective work gets you points.<br/>A great story gets you remembered.</p><div className="scoring-note"><span>UP TO <b>1,000</b> FOR SOLVING</span><span><b>+50</b> PER STORY VOTE</span></div></div><div className="leaderboard-table"><div className="leaderboard-caption"><span>THE LEADERBOARD</span><div className="rank-period"><button aria-pressed={rankPeriod === 'daily'} onClick={() => setRankPeriod('daily')}>Tonight</button><button aria-pressed={rankPeriod === 'all'} onClick={() => setRankPeriod('all')}>All time</button></div></div><div className="rank-head"><span>RANK / PLAYER</span><span>NIGHTS</span><span>POINTS</span></div>{leaders.length ? leaders.map((leader, i) => <div className={`rank-row ${leader.mine ? 'my-rank' : ''}`} key={leader.alias}><span><b>{String(i + 1).padStart(2, '0')}</b>@{leader.alias}{leader.mine && <small> YOU</small>}</span><span>{leader.nights}</span><strong>{leader.points.toLocaleString()}</strong></div>) : <div className="empty-leaderboard"><span className="empty-crown">♜</span><h3>The city’s next legend<br/>hasn’t clocked in yet.</h3><p>{community.available ? 'Post a story or finish a ranked night to claim your place.' : 'Community rankings will appear here when the feed reconnects.'}</p><button className="text-button" onClick={begin}>Start with tonight <Symbol name="arrow" size={17}/></button></div>}<div className="leaderboard-foot">REAL PLAYERS. QUESTIONABLE ALIBIS.</div></div></section>
     <footer className="night-footer"><Link href="/" className="footer-brand">WHERE THE HELL ARE WE<span>?</span></Link><div><span>MADE FOR THE CITY THAT SHOULD PROBABLY GO TO BED.</span><nav aria-label="Footer navigation"><Link href="/restaurants">The original NYC spots ↗</Link><button onClick={() => howRef.current?.showModal()}>The rules</button><span>NEW YORK, ALWAYS.</span></nav></div></footer>

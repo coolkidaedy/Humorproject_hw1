@@ -3136,6 +3136,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .guess-trail .correct b { color: #658246; }
 .guess-trail small { font: 6px monospace; color: #7b856d; white-space: nowrap; }
 .generation-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.writer-name-input { display: grid; gap: 4px; }
+.writer-name-input span { font: 8px/1 monospace; letter-spacing: .08em; text-transform: uppercase; color: #727b67; }
+.writer-name-input input { width: 160px; border: 1px solid #b9bead; border-radius: 2px; background: #faf8ed; color: #243229; padding: 10px 11px; font: 12px/1 Arial, sans-serif; }
+.writer-name-input input:focus { outline: 2px solid #a8b48a; outline-offset: 1px; }
 .generate-story-button { border: 1px solid #a8b48a; color: #3b522d; padding: 10px 13px; display: flex; align-items: center; gap: 9px; font-size: 11px; background: #e1eaca; border-radius: 2px; }
 .generate-story-button:hover:not(:disabled) { background: #d9e8b5; }
 .generate-story-button > span { font-size: 20px; line-height: 1; }
