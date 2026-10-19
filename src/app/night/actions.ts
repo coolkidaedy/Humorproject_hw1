@@ -22,7 +22,7 @@ export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' 
       return { state: data, message: action === 'guess' && !data.finished ? 'Not quite. Follow the evidence. −100 points.' : undefined };
     }
     const savedProgress = await readPractice();
-    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations } : savedProgress;
+    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations, storyGenerationVersion: savedProgress.storyGenerationVersion } : savedProgress;
     if (!progress.finished) {
       if (action === 'reveal') progress.revealed = Math.min(4, progress.revealed + 1);
       if (action === 'giveup') progress.finished = true;
@@ -89,6 +89,7 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
     if (!process.env.GEMINI_API_KEY?.trim()) return { error: 'AI story generation is not configured on this deployment yet. Your draft is safe.' };
     // Read context from the server, never accept forged guesses or clue counts from the client.
     let remaining: number;
+    let commitPracticeGeneration = false;
     if (signedIn && supabase) {
       const { data: budget, error: budgetError } = await supabase.rpc('night_reserve_story_generation');
       if (budgetError) return { error: 'The story writer is not ready on this deployment yet. Your draft is safe.' };
@@ -97,11 +98,14 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
     } else {
       if (!practiceProgress) return { error: 'Sign in to generate a story for this case.' };
       if (practiceProgress.storyGenerations >= 3) return { error: 'You’ve used today’s three practice drafts. You can still edit your current story.' };
-      practiceProgress.storyGenerations += 1;
-      await savePractice(practiceProgress);
-      remaining = 3 - practiceProgress.storyGenerations;
+      remaining = 2 - practiceProgress.storyGenerations;
+      commitPracticeGeneration = true;
     }
     const draft = await generateStoryDraft(night);
+    if (commitPracticeGeneration && practiceProgress) {
+      practiceProgress.storyGenerations += 1;
+      await savePractice(practiceProgress);
+    }
     return { draft, remaining };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

@@ -11,16 +11,16 @@ const processState = globalThis as typeof globalThis & { nightPracticeSecret?: s
 const configuredPracticeSecret = process.env.GAME_SESSION_SECRET || (process.env.GEMINI_API_KEY ? createHash('sha256').update(`wth-practice:${process.env.GEMINI_API_KEY}`).digest('hex') : '');
 const practiceSecret = configuredPracticeSecret || (processState.nightPracticeSecret ??= randomBytes(32).toString('hex'));
 const cookieName = 'wth-practice-v1';
-type Progress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number };
+type Progress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number; storyGenerationVersion: number };
 export async function readPractice(): Promise<Progress> {
-  const initial: Progress = { guesses: [], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: 0 };
+  const initial: Progress = { guesses: [], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: 0, storyGenerationVersion: 2 };
   try {
     const token = (await cookies()).get(cookieName)?.value || '';
     const [body, signature] = token.split('.');
     const expected = createHmac('sha256', practiceSecret).update(body || '').digest('hex');
     if (!signature || signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return initial;
     const value = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], storyGenerations: Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0 } : initial;
+    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], storyGenerations: value.storyGenerationVersion === 2 && Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0, storyGenerationVersion: 2 } : initial;
   } catch { return initial; }
 }
 export async function savePractice(progress: Progress) {
@@ -29,8 +29,8 @@ export async function savePractice(progress: Progress) {
   (await cookies()).set(cookieName, `${body}.${signature}`, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 86400 });
 }
 export function practiceState(progress: Progress): NightState {
-  const { storyGenerations: _storyGenerations, ...publicProgress } = progress;
-  void _storyGenerations;
+  const { storyGenerations: _storyGenerations, storyGenerationVersion: _storyGenerationVersion, ...publicProgress } = progress;
+  void _storyGenerations; void _storyGenerationVersion;
   return { ...publicProgress, mode: 'practice', number: 0, title: practiceNight.title, brief: practiceNight.brief,
     clues: practiceNight.clues.slice(0, progress.finished ? 4 : progress.revealed), score: deductionScore(progress.revealed, progress.wrong, progress.solved),
     ...(progress.finished ? { answer: practiceNight.answer, explanation: practiceNight.explanation, source: practiceNight.source } : {}),

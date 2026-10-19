@@ -24,7 +24,7 @@ export function validateStoryDraft(value: unknown): StoryDraft {
 export async function generateStoryDraft(night: NightState): Promise<StoryDraft> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('AI story generation is not configured yet. Your draft is safe.');
-  const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-3.6-flash';
+  const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-2.5-flash';
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
