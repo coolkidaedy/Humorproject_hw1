@@ -99,7 +99,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       else if (result.draft) {
         setTitle(result.draft.title); setBody(result.draft.body); setGenerated(true);
         setDraftsRemaining(result.remaining ?? null);
-        setStoryMessage('Your guess trail, reconstructed. Edit anything before publishing.');
+        setStoryMessage(result.fallback ? 'Draft rebuilt from your clues. Edit it or regenerate another version.' : 'Your guess trail, reconstructed. Edit anything before publishing.');
       }
     } catch { setStoryMessage('The story writer lost the thread. Your current draft is unchanged.'); }
     finally { setGenerating(false); }
@@ -188,7 +188,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
               </div>
               <div className="generation-tools">
                 <button type="button" className="generate-story-button" disabled={generating || pending} onClick={() => { if (body || title) setConfirmRemix(true); else void generateDraft(); }}>
-                  <span className={generating ? 'writing-star' : ''}>✳</span>{generating ? 'Writing from your hints…' : generated ? 'Regenerate daily story' : 'Generate story from my hints'}
+                  <span className={generating ? 'writing-star' : ''}>✳</span>{generating ? 'Writing from your hints…' : generated ? 'Regenerate story' : 'Generate story from my hints'}
                 </button>
                 {draftsRemaining !== null && <span>{draftsRemaining} AI {draftsRemaining === 1 ? 'draft' : 'drafts'} left today</span>}
                 {!loggedIn && <span>Practice generation works without an account.</span>}
@@ -201,7 +201,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
               <input className="story-title-input" id="story-title" placeholder="Your AI story title lands here…" minLength={3} maxLength={80} required disabled={generating || pending} value={title} onChange={e => setTitle(e.target.value)}/>
               <label htmlFor="story-body" className="sr-only">Edit your reconstruction</label>
               <textarea id="story-body" placeholder="Generate your reconstruction, then edit any part of it. Your wrong guesses become the detours. The clues tie it all together." minLength={80} maxLength={1200} rows={7} required disabled={generating || pending} value={body} onChange={e => setBody(e.target.value)}/>
-              <div className="editor-meta"><span>{generated ? 'AI DRAFT · FULLY EDITABLE BY YOU' : 'EDIT YOUR VERSION BEFORE SHARING'}</span><span>{body.length}/1,200</span></div>
+              <div className="editor-meta"><span>{generated ? 'GENERATED DRAFT · FULLY EDITABLE BY YOU' : 'EDIT YOUR VERSION BEFORE SHARING'}</span><span>{body.length}/1,200</span></div>
               <div className="editor-bottom"><div className="handle-input"><label htmlFor="story-alias">@</label><input id="story-alias" aria-label="Public handle" placeholder="your_handle" pattern="[a-zA-Z0-9_]{3,20}" minLength={3} maxLength={20} required disabled={generating || pending} value={alias} onChange={e => setAlias(e.target.value)}/></div><button className="primary-button" disabled={pending || generating || !body.trim()}>{pending ? 'Saving…' : night.mode === 'practice' ? 'Save practice story' : 'Publish my version'}<Symbol name="arrow" size={17}/></button></div>
               <p className="editor-help">80–1,200 characters. {night.mode === 'live' ? 'Edit freely before publishing. Published versions stay fixed for fair voting.' : 'Saved only in this browser. No public votes or points.'}</p>
             </form>

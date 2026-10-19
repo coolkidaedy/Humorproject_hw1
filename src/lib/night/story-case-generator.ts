@@ -1,5 +1,6 @@
 import type { Clue } from './types';
 import { geminiError } from '../gemini-error';
+import destinations from './destinations.json';
 
 export type StoryCaseSource = { id: string; alias: string; title: string; body: string };
 export type GeneratedStoryCase = {
@@ -43,6 +44,16 @@ export function validateStoryCase(value: unknown): GeneratedStoryCase {
   });
   if (clues.length !== 4) throw new Error('The generated case needs exactly four clues. Please try again.');
   return { title, brief, answer, aliases: Array.from(new Set([answer, ...aliases])), explanation, clues };
+}
+export function fallbackStoryCase(story: StoryCaseSource): GeneratedStoryCase {
+  const source = `${story.title} ${story.body}`.toLowerCase();
+  const destination = destinations.find(place => place.aliases.some(alias => source.includes(alias.toLowerCase())));
+  if (!destination) throw new Error('This story needs a specific NYC place before it can become a game.');
+  const labels = ['OVERHEARD', 'POCKET NOTE', 'UNSENT EXPLANATION', 'LAST KNOWN SIGNAL'];
+  const times = ['10:41 PM', '11:08 PM', '11:37 PM', '12:04 AM'];
+  const kinds = ['message', 'receipt', 'note', 'dispatch'] as const;
+  const clues = destination.facts.slice(0, 4).map((fact, index) => ({ kind: kinds[index], time: times[index], label: labels[index], text: fact.text }));
+  return validateStoryCase({ title: `The night after “${story.title.slice(0, 42)}”`, brief: 'A player left four details behind. Follow them to the place where the story ended.', answer: destination.answer, aliases: destination.aliases, explanation: destination.explanation, clues });
 }
 
 export async function generateStoryCase(story: StoryCaseSource): Promise<GeneratedStoryCase> {

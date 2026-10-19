@@ -5,9 +5,10 @@ import ts from 'typescript';
 
 const errorSource = readFileSync(new URL('../src/lib/gemini-error.ts', import.meta.url), 'utf8');
 const { geminiError } = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(errorSource,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText).toString('base64')}`);
+const destinations = JSON.parse(readFileSync(new URL('../src/lib/night/destinations.json', import.meta.url), 'utf8'));
 const source = readFileSync(new URL('../src/lib/night/story-case-generator.ts', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(`const geminiError=${geminiError.toString()};\n${ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText}`).toString('base64')}`;
-const { storyCasePrompt, validateStoryCase, generateStoryCase } = await import(moduleUrl);
+const moduleUrl = `data:text/javascript;base64,${Buffer.from(`const geminiError=${geminiError.toString()};\nconst destinations=${JSON.stringify(destinations)};\n${ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText}`).toString('base64')}`;
+const { storyCasePrompt, validateStoryCase, fallbackStoryCase, generateStoryCase } = await import(moduleUrl);
 const story = { id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', alias:'nightowl', title:'The clock made us confess', body:'We mistook Times Square for Grand Central Terminal, where the whispering wall carried the apology to the other corner.' };
 const generated = { title:'The apology had an echo', brief:'A confession crossed the room before anyone found the train.', answer:'Grand Central Terminal', aliases:['Grand Central','GCT'], explanation:'The train reference, opposite corners, and a message that travels across the room point to the whispering gallery at Grand Central.', clues:[
   {kind:'message',time:'11:41 PM',label:'GROUP CHAT',text:'The apology somehow reached the opposite corner.'},
@@ -29,6 +30,13 @@ test('story case validation enforces four ordered artifacts and prevents answer 
   assert.throws(()=>validateStoryCase({...generated,clues:generated.clues.map((clue,i)=>i===0?{...clue,text:'Meet at Grand Central'}:clue)}),/gave away/);
   assert.throws(()=>validateStoryCase({...generated,clues:generated.clues.map((clue,i)=>i===1?{...clue,kind:'message'}:clue)}),/malformed/);
   assert.throws(()=>validateStoryCase({error:'no place'}),/specific NYC place/);
+});
+
+test('story case fallback turns a named destination into four text clues', () => {
+  const value=fallbackStoryCase(story);
+  assert.equal(value.answer,'Grand Central Terminal');
+  assert.equal(value.clues.length,4);
+  assert.ok(value.clues.every(clue=>clue.text.length>=15));
 });
 
 test('case generation strips thought content and keeps provider failures private', async () => {

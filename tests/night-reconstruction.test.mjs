@@ -7,7 +7,7 @@ const load=async path=>import(compile(readFileSync(new URL(path,import.meta.url)
 const rules=await load('../src/lib/night/rules.ts');
 const {geminiError}=await load('../src/lib/gemini-error.ts');
 const storyGeneratorSource=readFileSync(new URL('../src/lib/night/story-generator.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-const {storyPrompt,validateStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\n${storyGeneratorSource}`));
+const {storyPrompt,validateStoryDraft,fallbackStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\n${storyGeneratorSource}`));
 const finished=()=>({day:rules.newYorkDay(),mode:'live',number:1,title:'One quick stop',brief:'A very questionable night.',clues:[{kind:'message',text:'A confession in opposite corners.'},{kind:'receipt',text:'Meet us by the four-faced clock.'}],revealed:2,wrong:1,finished:true,solved:true,score:700,answer:'Grand Central Terminal',explanation:'A whispering gallery and a four-faced clock.',guesses:[{place:'Times Square',clueCount:1,correct:false},{place:'Grand Central',clueCount:2,correct:true}]});
 const draft={title:'The wall knew first',body:'We were convinced we had reached Times Square. Then the wall started carrying our secrets. By the second clue, Grand Central was the only explanation for both the clock and our remarkably public confession.'};
 test('story prompt uses actual guesses in order and does not invent guesses for a skipped case',()=>{
@@ -25,6 +25,12 @@ test('story draft validation enforces editor limits and exposes only title and b
   assert.deepEqual(validateStoryDraft({...draft,extra:'ignore'}),draft);
   for(const value of [null,{}, {...draft,title:'x'}, {...draft,body:'short'}, {...draft,body:'x'.repeat(1201)}]) assert.throws(()=>validateStoryDraft(value));
 });
+test('story fallback produces an editable reconstruction from guesses and clues',()=>{
+  const value=fallbackStoryDraft(finished(),1);
+  assert.match(value.body,/Times Square/);
+  assert.match(value.body,/Grand Central Terminal/);
+  assert.ok(value.body.length>=80&&value.body.length<=1200);
+});
 test('AI reconstruction strips thought content, validates JSON, and keeps provider errors private',async()=>{
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';let sent;
@@ -41,6 +47,8 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
 let user={id:'verified-user'}, current=finished(), calls=0, budgetCalls=0, savedPractice=null, caseSource={ready:false,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',alias:'nightowl',title:'A night',body:'We ended at Grand Central Terminal after the apology crossed the whispering gallery.'}, savedCase=null;
 globalThis.nightActionTest={
   ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async value=>{savedPractice=value;},practiceNight:{aliases:['Grand Central']},
+  fallbackStoryDraft:()=>draft,
+  fallbackStoryCase:()=>({title:'Fallback case',brief:'Four details survived the night and point to one last stop.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clues point to Grand Central Terminal.',clues:[]}),
   generateStoryDraft:async night=>{calls++;assert.deepEqual(night.guesses,finished().guesses);return draft;},
   generateStoryCase:async source=>{assert.deepEqual(source,{id:caseSource.id,alias:caseSource.alias,title:caseSource.title,body:caseSource.body});return {title:'Echo case',brief:'A missed train carried one apology too far.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clock and whispering corners point to Grand Central Terminal.',clues:[]};},
   serverSupabase:async()=>({auth:{getUser:async()=>({data:{user}})},rpc:async(name,args)=>{
@@ -53,7 +61,7 @@ globalThis.nightActionTest={
   }}),
 };
 const actionSource=readFileSync(new URL('../src/app/night/actions.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-const {generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,generateStoryDraft,generateStoryCase,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
+const {generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
 test('reconstruction action requires identity, a finished run and server-fetched guess history before calling AI',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{

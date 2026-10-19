@@ -2,6 +2,7 @@ import type { NightState } from './types';
 import { geminiError } from '../gemini-error';
 
 export type StoryDraft = { title: string; body: string };
+const cleanSentence = (value: string) => value.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
 export function storyPrompt(night: NightState) {
   if (!night.finished || !night.answer) throw new Error('Finish the case before generating its story.');
   const context = {
@@ -20,6 +21,23 @@ export function validateStoryDraft(value: unknown): StoryDraft {
   const title = value.title.trim(), body = value.body.trim();
   if (title.length < 3 || title.length > 80 || body.length < 80 || body.length > 1200) throw new Error('The AI story did not fit the editor. Your current draft is unchanged; please try again.');
   return { title, body };
+}
+export function fallbackStoryDraft(night: NightState, variant = Date.now()): StoryDraft {
+  if (!night.finished || !night.answer) throw new Error('Finish the case before generating its story.');
+  const guesses = night.guesses || [];
+  const wrong = guesses.filter(guess => !guess.correct).map(guess => guess.place);
+  const clueText = night.clues.slice(0, Math.max(2, night.revealed)).map(clue => cleanSentence(clue.text));
+  const titles = ['The Night the Clues Started Talking', 'Four Clues and Absolutely No Plan', 'A Very Public Wrong Turn', 'The City Made Us Explain Ourselves'];
+  const wrongTurn = wrong.length
+    ? `Our theory started at ${wrong.join(', then ')}, each guess delivered with the confidence of people who had misunderstood almost everything.`
+    : 'We skipped the confident guesses and asked for directions, which somehow became the most dramatic decision of the night.';
+  const evidence = clueText.length
+    ? `The evidence was not subtle in hindsight: ${clueText.slice(0, 2).join('; ')}.`
+    : 'The evidence arrived as a collection of details that only looked obvious after the fact.';
+  const ending = night.solved
+    ? `By clue ${night.revealed}, the pieces finally pointed to ${night.answer}. We called it deduction; everyone else called it finally paying attention.`
+    : `Eventually the city gave up on our detective work and revealed ${night.answer}. We accepted the answer with the dignity of people who had been confidently lost.`;
+  return validateStoryDraft({ title: titles[Math.abs(variant) % titles.length], body: `We said this would be one quick stop. ${wrongTurn} ${evidence} ${ending} Nobody agreed on the exact sequence afterward, but we all agreed the clues made a better narrator than we did.` });
 }
 export async function generateStoryDraft(night: NightState): Promise<StoryDraft> {
   const key = process.env.GEMINI_API_KEY?.trim();

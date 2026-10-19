@@ -4,8 +4,8 @@ import { serverSupabase } from '@/lib/supabase/server';
 import { loadCommunity, practiceState, readPractice, savePractice } from '@/lib/night/server';
 import { practiceNight } from '@/lib/night/practice';
 import { newYorkDay, normalizeAnswer, validStory } from '@/lib/night/rules';
-import { generateStoryDraft } from '@/lib/night/story-generator';
-import { generateStoryCase } from '@/lib/night/story-case-generator';
+import { fallbackStoryDraft, generateStoryDraft } from '@/lib/night/story-generator';
+import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-generator';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
 
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
@@ -101,12 +101,15 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
       remaining = 2 - practiceProgress.storyGenerations;
       commitPracticeGeneration = true;
     }
-    const draft = await generateStoryDraft(night);
+    let fallback = false;
+    let draft;
+    try { draft = await generateStoryDraft(night); }
+    catch { draft = fallbackStoryDraft(night); fallback = true; }
     if (commitPracticeGeneration && practiceProgress) {
       practiceProgress.storyGenerations += 1;
       await savePractice(practiceProgress);
     }
-    return { draft, remaining };
+    return { draft, remaining, fallback };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return { error: /^(Gemini |The configured Gemini |The AI |The story writer )/.test(message) ? message : 'Story generation was interrupted. Your current draft is unchanged; please retry.' };
@@ -129,7 +132,9 @@ export async function prepareStoryCase(storyId: string) {
     const { data: budget, error: budgetError } = await supabase.rpc('night_reserve_case_generation');
     if (budgetError) return { error: 'Community case generation is not ready on this deployment yet.' };
     if (budget?.error) return { error: budget.error as string };
-    const generated = await generateStoryCase({ id: storyId, alias: source.alias, title: source.title, body: source.body });
+    let generated;
+    try { generated = await generateStoryCase({ id: storyId, alias: source.alias, title: source.title, body: source.body }); }
+    catch { generated = fallbackStoryCase({ id: storyId, alias: source.alias, title: source.title, body: source.body }); }
     const { data: saved, error: saveError } = await supabase.rpc('night_save_story_case', { source_story_id: storyId, case_payload: generated });
     if (saveError) return { error: 'The generated case could not be saved. Please try again.' };
     if (saved?.error) return { error: saved.error as string };

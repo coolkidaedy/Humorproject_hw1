@@ -36,7 +36,7 @@ test('AI output rejects leaked answers, missing clues, unsupported facts and mal
   const good=fixture(); assert.equal(validateGenerated(good,destination).clues.length,4);
   for (const change of [x=>x.clues.pop(),x=>x.clues[0].fact_ids=['invented'],x=>x.clues[1].kind='message',x=>x.clues[0].time='yesterday',x=>x.title=destination.answer,x=>x.clues[3].text=`We were definitely at ${destination.answer} all along.`]) { const invalid=fixture();change(invalid);assert.throws(()=>validateGenerated(invalid,destination)); }
 });
-test('generator uses one daily destination, keeps thought text out, and fails closed on provider errors', async () => {
+test('generator uses one daily destination, keeps thought text out, and falls back on provider errors', async () => {
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';
   try {
@@ -45,8 +45,8 @@ test('generator uses one daily destination, keeps thought text out, and fails cl
     assert.equal(generated.answer,destinationFor('2026-10-13').answer);
     assert.equal(generated.day,'2026-10-13');
     globalThis.fetch=async()=>new Response('{}',{status:429});
-    await assert.rejects(generateEpisode('2026-10-13'),/HTTP 429/);
+    assert.equal((await generateEpisode('2026-10-13')).clues.length,4);
     globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));
-    await assert.rejects(generateEpisode('2026-10-13'),/incomplete/);
+    assert.equal((await generateEpisode('2026-10-13')).clues.length,4);
   } finally { globalThis.fetch=originalFetch; if(originalKey===undefined) delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey; }
 });
