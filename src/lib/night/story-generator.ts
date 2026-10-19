@@ -24,13 +24,19 @@ export function validateStoryDraft(value: unknown): StoryDraft {
 export async function generateStoryDraft(night: NightState): Promise<StoryDraft> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('AI story generation is not configured yet. Your draft is safe.');
-  const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-3.8-flash';
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ model, input: storyPrompt(night), store: false, generation_config: { max_output_tokens: 3072 } }),
-    signal: AbortSignal.timeout(40000), cache: 'no-store',
-  });
+  const configuredModel = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '');
+  const models = configuredModel ? [configuredModel] : ['gemini-3.8-flash', 'gemini-3.7-flash'];
+  let response: Response | undefined;
+  for (const model of models) {
+    response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ model, input: storyPrompt(night), store: false, generation_config: { max_output_tokens: 3072 } }),
+      signal: AbortSignal.timeout(40000), cache: 'no-store',
+    });
+    if (response.ok || (response.status !== 404 && response.status < 500)) break;
+  }
+  if (!response) throw new Error('The story writer is unavailable. Your draft is unchanged; please try again later.');
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(`${geminiError(response.status, body)} Your draft is unchanged.`);
