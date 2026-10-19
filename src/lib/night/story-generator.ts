@@ -26,11 +26,13 @@ export function fallbackStoryDraft(night: NightState, variant = Date.now()): Sto
   if (!night.finished || !night.answer) throw new Error('Finish the case before generating its story.');
   const guesses = night.guesses || [];
   const wrong = guesses.filter(guess => !guess.correct).map(guess => guess.place);
-  const clueText = night.clues.slice(0, Math.max(2, night.revealed)).map(clue => cleanSentence(clue.text));
+  const clueText = night.clues.slice(0, Math.max(1, night.revealed)).map(clue => cleanSentence(clue.text));
   const titles = ['The Night the Clues Started Talking', 'Four Clues and Absolutely No Plan', 'A Very Public Wrong Turn', 'The City Made Us Explain Ourselves'];
   const wrongTurn = wrong.length
     ? `Our theory started at ${wrong.join(', then ')}, each guess delivered with the confidence of people who had misunderstood almost everything.`
-    : 'We skipped the confident guesses and asked for directions, which somehow became the most dramatic decision of the night.';
+    : guesses.some(guess => guess.correct)
+      ? `Our first real theory was ${night.answer}, delivered with suspicious confidence before anyone could talk us out of it.`
+      : 'We skipped the confident guesses and asked for directions, which somehow became the most dramatic decision of the night.';
   const evidence = clueText.length
     ? `The evidence was not subtle in hindsight: ${clueText.slice(0, 2).join('; ')}.`
     : 'The evidence arrived as a collection of details that only looked obvious after the fact.';
@@ -40,11 +42,16 @@ export function fallbackStoryDraft(night: NightState, variant = Date.now()): Sto
   return validateStoryDraft({ title: titles[Math.abs(variant) % titles.length], body: `We said this would be one quick stop. ${wrongTurn} ${evidence} ${ending} Nobody agreed on the exact sequence afterward, but we all agreed the clues made a better narrator than we did.` });
 }
 export async function generateStoryDraft(night: NightState): Promise<StoryDraft> {
-  let value: unknown;
-  try {
-    value = await generateGeminiJson(`${storyPrompt(night)}\nCREATIVE SEED: ${globalThis.crypto.randomUUID()}. Use it only to make this draft different from earlier drafts.`, { maxOutputTokens: 3072, temperature: 1 });
-  } catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : 'The story writer is unavailable.'} Your draft is unchanged.`);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const value = await generateGeminiJson(`${storyPrompt(night)}\nCREATIVE SEED: ${globalThis.crypto.randomUUID()}. Use it only to make this draft different from earlier drafts.\nAttempt ${attempt + 1}: keep the body between 500 and 900 characters and never exceed 1,200.`, { maxOutputTokens: 2200, temperature: 1 });
+      if (value && typeof value === 'object' && 'body' in value && typeof value.body === 'string' && value.body.trim().length > 1200) {
+        const shortened = value.body.trim().slice(0, 1196).replace(/\s+\S*$/, '').trim();
+        return validateStoryDraft({ ...value, body: `${shortened}…` });
+      }
+      return validateStoryDraft(value);
+    } catch (error) { lastError = error; }
   }
-  return validateStoryDraft(value);
+  throw new Error(`${lastError instanceof Error ? lastError.message : 'The story writer is unavailable.'} Your draft is unchanged.`);
 }
