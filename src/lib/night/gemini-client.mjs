@@ -26,7 +26,13 @@ export async function generateGeminiJson(prompt, { maxOutputTokens = 3072, tempe
   const configured = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '');
   // Avoid a model-list request on every Vercel cold start. Flash-Lite is the
   // fast path for short game copy; regular Flash remains the quality fallback.
-  const models = Array.from(new Set([configured, 'gemini-2.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean)));
+  const models = Array.from(new Set([
+    configured,
+    'gemini-flash-lite-latest',
+    'gemini-flash-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+  ].filter(Boolean)));
   let lastError = 'The AI writer is unavailable. Please try again.';
   for (const model of models) {
     let response;
@@ -35,7 +41,9 @@ export async function generateGeminiJson(prompt, { maxOutputTokens = 3072, tempe
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {
           maxOutputTokens, temperature, responseMimeType: 'application/json',
-          ...(/^gemini-2\.5-/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          ...(/^gemini-2\.5-/.test(model)
+            ? { thinkingConfig: { thinkingBudget: 0 } }
+            : (/^gemini-3|latest$/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {})),
         } }),
         signal: AbortSignal.timeout(45000), cache: 'no-store',
       });

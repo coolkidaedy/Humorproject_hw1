@@ -40,9 +40,9 @@ test('AI reconstruction uses the low-latency model path, validates JSON, and kee
     resetGeminiModelCache();
     globalThis.fetch=async(url,options)=>{requestedUrl=String(url);sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
     assert.deepEqual(await generateStoryDraft(finished()),draft);
-    assert.match(requestedUrl,/gemini-2\.5-flash-lite:generateContent/);
+    assert.match(requestedUrl,/gemini-flash-lite-latest:generateContent/);
     assert.doesNotMatch(requestedUrl,/models\?pageSize/);
-    assert.equal(sent.generationConfig.thinkingConfig.thinkingBudget,0);
+    assert.equal(sent.generationConfig.thinkingConfig.thinkingLevel,'low');
     assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
     await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
