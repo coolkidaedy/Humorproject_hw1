@@ -61,7 +61,6 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   const [draftReady, setDraftReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
-  const [confirmRemix, setConfirmRemix] = useState(false);
   const [draftsRemaining, setDraftsRemaining] = useState<number | null>(null);
   const autoDraftAttempted = useRef(false);
   const [storyMessage, setStoryMessage] = useState('');
@@ -99,7 +98,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   }, [night.day]);
   const ownStory = community.stories.find(story => story.mine);
   const generateDraft = useCallback(async () => {
-    setGenerating(true); setStoryMessage(''); setConfirmRemix(false);
+    setGenerating(true); setStoryMessage('');
     try {
       const result = await generateNightReconstruction(night.day, night.mode);
       if (result.error) setStoryMessage(result.error);
@@ -113,8 +112,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   }, [night.day, night.mode]);
   function requestStoryDraft() {
     storyRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
-    if (body || title) setConfirmRemix(true);
-    else void generateDraft();
+    void generateDraft();
   }
   useEffect(() => {
     if (!night.finished || !draftReady || !loggedIn || body || title || ownStory || autoDraftAttempted.current) return;
@@ -217,7 +215,6 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
                 {draftsRemaining !== null && <span>{draftsRemaining} AI {draftsRemaining === 1 ? 'draft' : 'drafts'} left today</span>}
                 {!loggedIn && <span>Generate and edit without an account. Sign in to post and vote.</span>}
               </div>
-              {confirmRemix && <div className="remix-confirm"><p>Regenerate today’s story? The new version will replace this draft, including your edits, only after generation succeeds.</p><button type="button" onClick={() => void generateDraft()}>Regenerate story</button><button type="button" onClick={() => setConfirmRemix(false)}>Keep my edits</button></div>}
             </div>
             {generating && <div className="story-writing" role="status"><i/><i/><i/><span>Reconstructing the night from your actual guesses…</span></div>}
             <form onSubmit={publish} aria-busy={generating}>

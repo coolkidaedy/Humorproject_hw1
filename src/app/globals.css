@@ -3142,9 +3142,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .writing-star { animation: slow-turn 3s linear infinite; }
 .generation-tools > span { font: 8px monospace; color: #869275; }
 .generation-signin p { font-size: 9px; color: #869275; margin: 0; }
-.remix-confirm { background: #e4e7d7; border: 1px solid #c7ceb8; margin-top: 14px; padding: 12px; font-size: 11px; line-height: 1.6; }
-.remix-confirm p { margin: 0 0 8px; }
-.remix-confirm button { font-size: 10px; margin-right: 16px; text-decoration: underline; text-underline-offset: 3px; }
 .story-writing { padding: 23px 0 0; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .story-writing i { height: 5px; width: 5px; background: #7d9559; border-radius: 50%; animation: draft-dot 1.3s ease-in-out infinite; }
 .story-writing i:nth-child(2) { animation-delay: .15s; }
