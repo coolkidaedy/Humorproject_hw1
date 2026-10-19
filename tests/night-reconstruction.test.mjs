@@ -12,16 +12,14 @@ globalThis.generateGeminiJsonTest=generateGeminiJson;
 const {storyPrompt,validateStoryDraft,fallbackStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\nconst generateGeminiJson=globalThis.generateGeminiJsonTest;\n${storyGeneratorSource}`));
 const finished=()=>({day:rules.newYorkDay(),mode:'live',number:1,title:'One quick stop',brief:'A very questionable night.',clues:[{kind:'message',text:'A confession in opposite corners.'},{kind:'receipt',text:'Meet us by the four-faced clock.'}],revealed:2,wrong:1,finished:true,solved:true,score:700,answer:'Grand Central Terminal',explanation:'A whispering gallery and a four-faced clock.',guesses:[{place:'Times Square',clueCount:1,correct:false},{place:'Grand Central',clueCount:2,correct:true}]});
 const draft={title:'The wall knew first',body:'We were convinced we had reached Times Square. Then the wall started carrying our secrets. By the second clue, Grand Central was the only explanation for both the clock and our remarkably public confession.'};
-test('story prompt uses actual guesses in order and does not invent guesses for a skipped case',()=>{
+test('story prompt sends the revealed clues and actual guesses',()=>{
   const prompt=storyPrompt(finished());
-  const context=JSON.parse(prompt.split('GAME CONTEXT:\n')[1]);
-  assert.deepEqual(context.guesses_in_order,finished().guesses);
-  assert.equal(context.clues_used_to_solve,2);
-  assert.equal(context.final_location,'Grand Central Terminal');
+  assert.match(prompt,/A confession in opposite corners/);
+  assert.match(prompt,/Meet us by the four-faced clock/);
+  assert.match(prompt,/Times Square/);
+  assert.match(prompt,/Grand Central Terminal/);
   assert.throws(()=>storyPrompt({...finished(),finished:false}));
-  const noGuesses=JSON.parse(storyPrompt({...finished(),guesses:[],solved:false}).split('GAME CONTEXT:\n')[1]);
-  assert.deepEqual(noGuesses.guesses_in_order,[]);
-  assert.equal(noGuesses.outcome,'revealed after getting lost');
+  assert.match(storyPrompt({...finished(),guesses:[],solved:false}),/PLAYER GUESSES:\n\[\]/);
 });
 test('story draft validation enforces editor limits and exposes only title and body',()=>{
   assert.deepEqual(validateStoryDraft({...draft,extra:'ignore'}),draft);
@@ -33,7 +31,7 @@ test('story fallback produces an editable reconstruction from guesses and clues'
   assert.match(value.body,/Grand Central Terminal/);
   assert.ok(value.body.length>=80&&value.body.length<=1200);
 });
-test('AI reconstruction discovers an enabled model in parallel, validates JSON, and keeps provider errors private',async()=>{
+test('AI reconstruction discovers one enabled model, makes one generation request, and keeps provider errors private',async()=>{
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';let sent;const requestedUrls=[];
   try {
@@ -41,7 +39,8 @@ test('AI reconstruction discovers an enabled model in parallel, validates JSON, 
     globalThis.fetch=async(url,options)=>{requestedUrls.push(String(url));if(String(url).includes('?pageSize='))return new Response(JSON.stringify({models:[{name:'models/gemini-test-flash',supportedGenerationMethods:['generateContent']}]}));sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
     assert.deepEqual(await generateStoryDraft(finished()),draft);
     assert.ok(requestedUrls.some(url=>url.includes('/models?pageSize=')));
-    assert.ok(requestedUrls.some(url=>url.includes('gemini-flash-lite-latest:generateContent')));
+    assert.equal(requestedUrls.filter(url=>url.includes(':generateContent')).length,1);
+    assert.ok(requestedUrls.some(url=>url.includes('gemini-test-flash:generateContent')));
     assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
     await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
@@ -68,12 +67,11 @@ globalThis.nightActionTest={
 };
 const actionSource=readFileSync(new URL('../src/app/night/actions.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
 const {generateNewPracticeCase,generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,generateFreshEpisode,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
-test('reconstruction action requires identity, a finished run and server-fetched guess history before calling AI',async()=>{
+test('reconstruction action uses the server-fetched finished run without an extra quota RPC',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{
-    user=null;assert.match((await generateNightReconstruction(rules.newYorkDay(),'live')).error,/Sign in/);assert.equal(calls,0);
-    user={id:'verified-user'};current={...finished(),finished:false};assert.match((await generateNightReconstruction(rules.newYorkDay(),'live')).error,/Finish/);assert.equal(budgetCalls,0);
-    current=finished();assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'live')).draft,draft);assert.equal(calls,1);assert.equal(budgetCalls,1);
+    user=null;current={...finished(),finished:false};assert.match((await generateNightReconstruction(rules.newYorkDay(),'live')).error,/Finish/);assert.equal(calls,0);
+    current=finished();assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'live')).draft,draft);assert.equal(calls,1);assert.equal(budgetCalls,0);
     assert.match((await generateNightReconstruction('2000-01-01','live')).error,/closed/);assert.equal(calls,1);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
@@ -82,9 +80,8 @@ test('finished practice players can generate from their hints without an account
   try{
     user=null;savedPractice=null;current={...finished(),mode:'practice',storyGenerations:1};
     const result=await generateNightReconstruction(rules.newYorkDay(),'practice');
-    assert.deepEqual(result.draft,draft);assert.equal(result.remaining,8);assert.equal(savedPractice.storyGenerations,2);
-    current={...current,storyGenerations:10};
-    assert.match((await generateNightReconstruction(rules.newYorkDay(),'practice')).error,/ten practice drafts/);
+    assert.deepEqual(result.draft,draft);assert.equal(savedPractice,null);
+    assert.deepEqual((await generateNightReconstruction(rules.newYorkDay(),'practice')).draft,draft);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
 test('a new practice case resets play and keeps a real NYC answer with its clues',async()=>{

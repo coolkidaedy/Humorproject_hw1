@@ -4,12 +4,10 @@ import { serverSupabase } from '@/lib/supabase/server';
 import { loadCommunity, practiceState, readPractice, savePractice } from '@/lib/night/server';
 import { practiceNight } from '@/lib/night/practice';
 import { newYorkDay, normalizeAnswer, validStory } from '@/lib/night/rules';
-import { fallbackStoryDraft, generateStoryDraft } from '@/lib/night/story-generator';
+import { generateStoryDraft } from '@/lib/night/story-generator';
 import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-generator';
 import { generateFreshEpisode } from '@/lib/night/generator.mjs';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
-
-const practiceDraftLimit = 10;
 
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
   if (!['state', 'reveal', 'guess', 'giveup', 'restart'].includes(action) || !['live', 'practice'].includes(mode)) return { error: 'That move is unavailable.' };
@@ -91,47 +89,18 @@ export async function refreshCommunity(day: string) {
 export async function generateNightReconstruction(day: string, mode: 'live' | 'practice') {
   if (day !== newYorkDay() || !['live', 'practice'].includes(mode)) return { error: 'This night has closed. Refresh for today’s case.' };
   try {
-    let supabase: Awaited<ReturnType<typeof serverSupabase>> | null = null;
-    let signedIn = false;
-    try {
-      supabase = await serverSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
-      signedIn = Boolean(user);
-    } catch { /* Practice generation remains available without the community connection. */ }
-    if (mode === 'live' && (!supabase || !signedIn)) return { error: 'Sign in to let AI reconstruct your ranked night.' };
     let night: NightState;
-    let practiceProgress: Awaited<ReturnType<typeof readPractice>> | null = null;
-    if (mode === 'practice') { practiceProgress = await readPractice(); night = practiceState(practiceProgress); }
+    if (mode === 'practice') { night = practiceState(await readPractice()); }
     else {
-      const { data, error } = await supabase!.rpc('night_play', { action_name: 'state', guess_text: '' });
+      const supabase = await serverSupabase();
+      const { data, error } = await supabase.rpc('night_play', { action_name: 'state', guess_text: '' });
       if (error || !data || data.error) return { error: 'Couldn’t retrieve your guess trail. Please retry.' };
       night = data;
     }
     if (!night.finished || !night.answer) return { error: 'Finish the mystery to unlock your AI reconstruction.' };
     if (!process.env.GEMINI_API_KEY?.trim()) return { error: 'AI story generation is not configured on this deployment yet. Your draft is safe.' };
-    // Read context from the server, never accept forged guesses or clue counts from the client.
-    let remaining: number;
-    let commitPracticeGeneration = false;
-    if (signedIn && supabase) {
-      const { data: budget, error: budgetError } = await supabase.rpc('night_reserve_story_generation');
-      if (budgetError) return { error: 'The story writer is not ready on this deployment yet. Your draft is safe.' };
-      if (budget?.error) return { error: budget.error as string };
-      remaining = budget.remaining as number;
-    } else {
-      if (!practiceProgress) return { error: 'Sign in to generate a story for this case.' };
-      if (practiceProgress.storyGenerations >= practiceDraftLimit) return { error: 'You’ve used this case’s ten practice drafts. You can still edit your current story or generate a new case.' };
-      remaining = practiceDraftLimit - practiceProgress.storyGenerations - 1;
-      commitPracticeGeneration = true;
-    }
-    let fallback = false;
-    let draft;
-    try { draft = await generateStoryDraft(night); }
-    catch { draft = fallbackStoryDraft(night); fallback = true; }
-    if (commitPracticeGeneration && practiceProgress) {
-      practiceProgress.storyGenerations += 1;
-      await savePractice(practiceProgress);
-    }
-    return { draft, remaining, fallback };
+    const draft = await generateStoryDraft(night);
+    return { draft };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     return { error: /^(Gemini |The configured Gemini |The AI |The story writer )/.test(message) ? message : 'Story generation was interrupted. Your current draft is unchanged; please retry.' };

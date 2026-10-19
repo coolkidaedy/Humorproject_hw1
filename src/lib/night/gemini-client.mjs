@@ -51,48 +51,34 @@ export async function generateGeminiJson(prompt, { maxOutputTokens = 3072, tempe
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('AI generation is not configured on this deployment yet.');
   const configured = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '');
-  // Avoid a model-list request on every Vercel cold start. Flash-Lite is the
-  // fast path for short game copy; regular Flash remains the quality fallback.
-  const models = Array.from(new Set([
-    configured,
-    'gemini-flash-lite-latest',
-    'gemini-flash-latest',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
-  ].filter(Boolean)));
-  // Start discovery alongside the fast attempt. Projects with a narrower
-  // allowlist can fall back to an enabled model without waiting serially.
-  const discoveredModels = availableModels(key).catch(() => []);
-  let discoveryAdded = false;
-  let lastError = 'The AI writer is unavailable. Please try again.';
-  for (let index = 0; ; index += 1) {
-    if (index >= models.length) {
-      if (discoveryAdded) break;
-      discoveryAdded = true;
-      for (const name of await discoveredModels) if (!models.includes(name)) models.push(name);
-      if (index >= models.length) break;
-    }
-    const model = models[index];
-    let response;
-    try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature, responseMimeType: 'application/json' } }),
-        signal: AbortSignal.timeout(45000), cache: 'no-store',
-      });
-    } catch { lastError = 'Gemini is temporarily unavailable. Please try again later.'; continue; }
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      lastError = safeProviderError(response.status, body);
-      if ([400, 403, 404, 429].includes(response.status) || response.status >= 500) continue;
-      break;
-    }
-    const text = extractText(await response.json());
-    if (!text) { lastError = 'The AI could not finish the response. Please try again.'; continue; }
-    try { return parseJson(text); }
-    catch { lastError = 'The AI returned an unreadable response. Please try again.'; }
+  const discovered = configured ? [] : await availableModels(key).catch(() => []);
+  const model = configured || discovered[0] || 'gemini-2.5-flash';
+  const requestId = globalThis.crypto.randomUUID();
+  const startedAt = Date.now();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  console.info('[night-ai:request] POST Gemini', JSON.stringify({ requestId, model, promptCharacters: prompt.length, maxOutputTokens }));
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature, responseMimeType: 'application/json' } }),
+      signal: AbortSignal.timeout(45000), cache: 'no-store',
+    });
+  } catch {
+    console.error('[night-ai:response] Gemini request failed', JSON.stringify({ requestId, model, durationMs: Date.now() - startedAt }));
+    throw new Error('Gemini is temporarily unavailable. Please try again later.');
   }
-  throw new Error(lastError);
+
+  console.info('[night-ai:response] Gemini response', JSON.stringify({ requestId, model, status: response.status, durationMs: Date.now() - startedAt }));
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(safeProviderError(response.status, body));
+  }
+  const text = extractText(await response.json());
+  if (!text) throw new Error('The AI could not finish the response. Please try again.');
+  try { return parseJson(text); }
+  catch { throw new Error('The AI returned an unreadable response. Please try again.'); }
 }
 
 export function resetGeminiModelCache() { modelCache = { expires: 0, names: [] }; }
