@@ -15,7 +15,7 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return { error: "Log in before generating a caption." };
     const key = process.env.GEMINI_API_KEY?.trim();
-    const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "") || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "") || "gemini-3.8-flash";
     if (!key) return { error: "Caption generation is not configured yet. Please try again later." };
     const prompt = buildPrompt(input.prompt, input.tone);
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
