@@ -25,10 +25,10 @@ export async function generateStoryDraft(night: NightState): Promise<StoryDraft>
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('AI story generation is not configured yet. Your draft is safe.');
   const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '') || 'gemini-3.8-flash';
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: storyPrompt(night) }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 3072 } }),
+    body: JSON.stringify({ model, input: storyPrompt(night), store: false, generation_config: { max_output_tokens: 3072 } }),
     signal: AbortSignal.timeout(40000), cache: 'no-store',
   });
   if (!response.ok) {
@@ -36,9 +36,8 @@ export async function generateStoryDraft(night: NightState): Promise<StoryDraft>
     throw new Error(`${geminiError(response.status, body)} Your draft is unchanged.`);
   }
   const result = await response.json();
-  const candidate = result.candidates?.[0];
-  if (candidate?.finishReason !== 'STOP') throw new Error('The AI could not finish the story. Your draft is unchanged.');
-  const text = candidate.content?.parts?.filter((part: { thought?: boolean; text?: string }) => !part.thought && typeof part.text === 'string').map((part: { text: string }) => part.text).join('');
+  if (result.status && result.status !== 'completed') throw new Error('The AI could not finish the story. Your draft is unchanged.');
+  const text = typeof result.output_text === 'string' ? result.output_text : result.steps?.filter((step: { type?: string }) => step.type === 'model_output').flatMap((step: { content?: { type?: string; text?: string }[] }) => step.content || []).filter((part: { type?: string; text?: string }) => part.type === 'text' && typeof part.text === 'string').map((part: { text: string }) => part.text).join('');
   let value: unknown;
   try { value = JSON.parse(text); } catch { throw new Error('The story writer returned an unreadable draft. Please try again.'); }
   return validateStoryDraft(value);

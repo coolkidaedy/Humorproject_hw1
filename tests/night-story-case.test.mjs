@@ -35,7 +35,7 @@ test('case generation strips thought content and keeps provider failures private
   const originalFetch=globalThis.fetch, originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';
   try {
-    globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'private reasoning'},{text:JSON.stringify(generated)}]}}]}));
+    globalThis.fetch=async()=>new Response(JSON.stringify({status:'completed',steps:[{type:'model_output',content:[{type:'thought',text:'private reasoning'},{type:'text',text:JSON.stringify(generated)}]}]}));
     assert.deepEqual((await generateStoryCase(story)).answer,'Grand Central Terminal');
     globalThis.fetch=async()=>new Response('private provider detail',{status:403});
     await assert.rejects(generateStoryCase(story),error=>/denied access/.test(error.message)&&!error.message.includes('private provider detail'));

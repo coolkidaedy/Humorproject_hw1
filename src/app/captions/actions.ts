@@ -18,10 +18,10 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
     const model = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "") || "gemini-3.8-flash";
     if (!key) return { error: "Caption generation is not configured yet. Please try again later." };
     const prompt = buildPrompt(input.prompt, input.tone);
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 2048 } }),
+      body: JSON.stringify({ model, input: prompt, store: false, generation_config: { max_output_tokens: 2048 } }),
       signal: AbortSignal.timeout(40000),
       cache: "no-store",
     });
@@ -32,9 +32,8 @@ export async function generateCaption(_state: CaptionState, form: FormData): Pro
       return { error };
     }
     const result = await response.json();
-    const candidate = result.candidates?.[0];
-    const content = candidate?.content?.parts?.filter((part: { thought?: boolean; text?: string }) => !part.thought && typeof part.text === "string").map((part: { text: string }) => part.text).join("").trim();
-    if (candidate?.finishReason !== "STOP" || !content || content.length > 1000) return { error: "The AI couldn’t finish a suitable caption. Try another situation." };
+    const content = (typeof result.output_text === "string" ? result.output_text : result.steps?.filter((step: { type?: string }) => step.type === "model_output").flatMap((step: { content?: { type?: string; text?: string }[] }) => step.content || []).filter((part: { type?: string; text?: string }) => part.type === "text" && typeof part.text === "string").map((part: { text: string }) => part.text).join("") || "").trim();
+    if ((result.status && result.status !== "completed") || !content || content.length > 1000) return { error: "The AI couldn’t finish a suitable caption. Try another situation." };
     const { data, error } = await supabase.from("captions").insert({ user_id: user.id, situation: input.prompt, tone: input.tone, prompt, content, model }).select("id").single();
     if (error) return { error: "Your caption could not be saved. Please try again later." };
     revalidatePath("/captions");

@@ -41,7 +41,7 @@ test('actions enforce authentication and save only verified user identity', asyn
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.GEMINI_API_KEY;
   let calls = 0;
-  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'A funny caption.' }] } }] })); };
+  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify({ status: 'completed', steps: [{ type: 'model_output', content: [{ type: 'text', text: 'A funny caption.' }] }] })); };
   process.env.GEMINI_API_KEY = 'test-only';
   try {
     client = { auth: { getUser: async () => ({ data: { user: null } }) } };

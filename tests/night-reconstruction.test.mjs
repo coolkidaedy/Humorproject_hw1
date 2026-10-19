@@ -29,12 +29,12 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';let sent;
   try {
-    globalThis.fetch=async(_url,options)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'private reasoning'},{text:JSON.stringify(draft)}]}}]}));};
+    globalThis.fetch=async(_url,options)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({status:'completed',steps:[{type:'model_output',content:[{type:'thought',text:'private reasoning'},{type:'text',text:JSON.stringify(draft)}]}]}));};
     assert.deepEqual(await generateStoryDraft(finished()),draft);
-    assert.match(sent.contents[0].parts[0].text,/Times Square/);
+    assert.match(sent.input,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
     await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
-    globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'MAX_TOKENS'}]}));
+    globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));
     await assert.rejects(generateStoryDraft(finished()),/could not finish/);
   } finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}
 });

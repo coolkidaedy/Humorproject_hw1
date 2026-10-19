@@ -40,13 +40,13 @@ test('generator uses one daily destination, keeps thought text out, and fails cl
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';
   try {
-    globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'not valid json'},{text:JSON.stringify(fixture())}]}}]}));
+    globalThis.fetch=async()=>new Response(JSON.stringify({status:'completed',steps:[{type:'model_output',content:[{type:'thought',text:'not valid json'},{type:'text',text:JSON.stringify(fixture())}]}]}));
     const generated=await generateEpisode('2026-10-13');
     assert.equal(generated.answer,destinationFor('2026-10-13').answer);
     assert.equal(generated.day,'2026-10-13');
     globalThis.fetch=async()=>new Response('{}',{status:429});
     await assert.rejects(generateEpisode('2026-10-13'),/HTTP 429/);
-    globalThis.fetch=async()=>new Response(JSON.stringify({candidates:[{finishReason:'MAX_TOKENS'}]}));
+    globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));
     await assert.rejects(generateEpisode('2026-10-13'),/incomplete/);
   } finally { globalThis.fetch=originalFetch; if(originalKey===undefined) delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey; }
 });
