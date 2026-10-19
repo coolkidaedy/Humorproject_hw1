@@ -105,7 +105,7 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
     return { draft, remaining };
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    return { error: /^(The AI |The story writer )/.test(message) ? message : 'Story generation was interrupted. Your current draft is unchanged; please retry.' };
+    return { error: /^(Gemini |The configured Gemini |The AI |The story writer )/.test(message) ? message : 'Story generation was interrupted. Your current draft is unchanged; please retry.' };
   }
 }
 
