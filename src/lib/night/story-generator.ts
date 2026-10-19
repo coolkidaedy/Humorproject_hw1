@@ -1,5 +1,5 @@
 import type { NightState } from './types';
-import { geminiError } from '../gemini-error';
+import { generateGeminiJson } from './gemini-client.mjs';
 
 export type StoryDraft = { title: string; body: string };
 const cleanSentence = (value: string) => value.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
@@ -40,29 +40,11 @@ export function fallbackStoryDraft(night: NightState, variant = Date.now()): Sto
   return validateStoryDraft({ title: titles[Math.abs(variant) % titles.length], body: `We said this would be one quick stop. ${wrongTurn} ${evidence} ${ending} Nobody agreed on the exact sequence afterward, but we all agreed the clues made a better narrator than we did.` });
 }
 export async function generateStoryDraft(night: NightState): Promise<StoryDraft> {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error('AI story generation is not configured yet. Your draft is safe.');
-  const configuredModel = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '');
-  const models = configuredModel ? [configuredModel] : ['gemini-3.8-flash', 'gemini-3.7-flash'];
-  let response: Response | undefined;
-  for (const model of models) {
-    response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ model, input: storyPrompt(night), store: false, generation_config: { max_output_tokens: 3072 } }),
-      signal: AbortSignal.timeout(40000), cache: 'no-store',
-    });
-    if (response.ok || (response.status !== 404 && response.status < 500)) break;
-  }
-  if (!response) throw new Error('The story writer is unavailable. Your draft is unchanged; please try again later.');
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(`${geminiError(response.status, body)} Your draft is unchanged.`);
-  }
-  const result = await response.json();
-  if (result.status && result.status !== 'completed') throw new Error('The AI could not finish the story. Your draft is unchanged.');
-  const text = typeof result.output_text === 'string' ? result.output_text : result.steps?.filter((step: { type?: string }) => step.type === 'model_output').flatMap((step: { content?: { type?: string; text?: string }[] }) => step.content || []).filter((part: { type?: string; text?: string }) => part.type === 'text' && typeof part.text === 'string').map((part: { text: string }) => part.text).join('');
   let value: unknown;
-  try { value = JSON.parse(text); } catch { throw new Error('The story writer returned an unreadable draft. Please try again.'); }
+  try {
+    value = await generateGeminiJson(`${storyPrompt(night)}\nCREATIVE SEED: ${globalThis.crypto.randomUUID()}. Use it only to make this draft different from earlier drafts.`, { maxOutputTokens: 3072, temperature: 1 });
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : 'The story writer is unavailable.'} Your draft is unchanged.`);
+  }
   return validateStoryDraft(value);
 }

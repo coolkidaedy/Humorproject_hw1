@@ -6,7 +6,7 @@ import { practiceNight } from '@/lib/night/practice';
 import { newYorkDay, normalizeAnswer, validStory } from '@/lib/night/rules';
 import { fallbackStoryDraft, generateStoryDraft } from '@/lib/night/story-generator';
 import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-generator';
-import { destinationFor, generateEpisode, nextDay } from '@/lib/night/generator.mjs';
+import { destinationFor, generateEpisode } from '@/lib/night/generator.mjs';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
 
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
@@ -43,9 +43,10 @@ export async function generateNewPracticeCase(): Promise<GameResult> {
   try {
     const current = await readPractice();
     const currentAnswer = current.episode?.answer || practiceNight.answer;
-    let seedDay = nextDay(newYorkDay());
-    while (destinationFor(seedDay).answer === currentAnswer) seedDay = nextDay(seedDay);
-    const generated = await generateEpisode(seedDay);
+    const seedDay = newYorkDay();
+    let creativeSeed = globalThis.crypto.randomUUID();
+    while (destinationFor(seedDay, creativeSeed).answer === currentAnswer) creativeSeed = globalThis.crypto.randomUUID();
+    const generated = await generateEpisode(seedDay, creativeSeed);
     const episode = { title: generated.title, brief: generated.brief, answer: generated.answer, aliases: generated.aliases, explanation: generated.explanation, source: generated.source, clues: generated.clues };
     const progress = { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: current.storyGenerations, storyGenerationVersion: current.storyGenerationVersion, episode };
     await savePractice(progress);

@@ -6,8 +6,10 @@ const compile=text=>`data:text/javascript;base64,${Buffer.from(ts.transpileModul
 const load=async path=>import(compile(readFileSync(new URL(path,import.meta.url),'utf8')));
 const rules=await load('../src/lib/night/rules.ts');
 const {geminiError}=await load('../src/lib/gemini-error.ts');
+const {generateGeminiJson,resetGeminiModelCache}=await import('../src/lib/night/gemini-client.mjs');
 const storyGeneratorSource=readFileSync(new URL('../src/lib/night/story-generator.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-const {storyPrompt,validateStoryDraft,fallbackStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\n${storyGeneratorSource}`));
+globalThis.generateGeminiJsonTest=generateGeminiJson;
+const {storyPrompt,validateStoryDraft,fallbackStoryDraft,generateStoryDraft}=await import(compile(`const geminiError=${geminiError.toString()};\nconst generateGeminiJson=globalThis.generateGeminiJsonTest;\n${storyGeneratorSource}`));
 const finished=()=>({day:rules.newYorkDay(),mode:'live',number:1,title:'One quick stop',brief:'A very questionable night.',clues:[{kind:'message',text:'A confession in opposite corners.'},{kind:'receipt',text:'Meet us by the four-faced clock.'}],revealed:2,wrong:1,finished:true,solved:true,score:700,answer:'Grand Central Terminal',explanation:'A whispering gallery and a four-faced clock.',guesses:[{place:'Times Square',clueCount:1,correct:false},{place:'Grand Central',clueCount:2,correct:true}]});
 const draft={title:'The wall knew first',body:'We were convinced we had reached Times Square. Then the wall started carrying our secrets. By the second clue, Grand Central was the only explanation for both the clock and our remarkably public confession.'};
 test('story prompt uses actual guesses in order and does not invent guesses for a skipped case',()=>{
@@ -35,9 +37,10 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';let sent;
   try {
-    globalThis.fetch=async(_url,options)=>{sent=JSON.parse(options.body);return new Response(JSON.stringify({status:'completed',steps:[{type:'model_output',content:[{type:'thought',text:'private reasoning'},{type:'text',text:JSON.stringify(draft)}]}]}));};
+    resetGeminiModelCache();
+    globalThis.fetch=async(url,options)=>{if(String(url).includes('?pageSize='))return new Response(JSON.stringify({models:[{name:'models/gemini-test-flash',supportedGenerationMethods:['generateContent']}]}));sent=JSON.parse(options.body);return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(draft)}]}}]}));};
     assert.deepEqual(await generateStoryDraft(finished()),draft);
-    assert.match(sent.input,/Times Square/);
+    assert.match(sent.contents[0].parts[0].text,/Times Square/);
     globalThis.fetch=async()=>new Response('private provider details',{status:403});
     await assert.rejects(generateStoryDraft(finished()),error=>!error.message.includes('private provider details')&&/denied access/.test(error.message));
     globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));

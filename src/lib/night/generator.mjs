@@ -1,13 +1,20 @@
 import destinations from './destinations.json' with { type: 'json' };
+import { generateGeminiJson } from './gemini-client.mjs';
 
 export function dateInNewYork(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 export function nextDay(day) { return new Date(Date.parse(`${day}T12:00:00Z`) + 86400000).toISOString().slice(0, 10); }
 export function validDay(day) { return typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day; }
-export function destinationFor(day) {
+function seedHash(value) {
+  let hash = 2166136261;
+  for (const character of value) { hash ^= character.charCodeAt(0); hash = Math.imul(hash, 16777619); }
+  return hash >>> 0;
+}
+export function destinationFor(day, creativeSeed = '') {
   if (!validDay(day)) throw new Error('Use a valid YYYY-MM-DD date.');
-  return destinations[Math.floor(Date.parse(`${day}T12:00:00Z`) / 86400000) % destinations.length];
+  const dayIndex = Math.floor(Date.parse(`${day}T12:00:00Z`) / 86400000);
+  return destinations[creativeSeed ? seedHash(`${day}:${creativeSeed}`) % destinations.length : dayIndex % destinations.length];
 }
 export function validateGenerated(raw, destination) {
   if (!raw || typeof raw !== 'object' || typeof raw.title !== 'string' || raw.title.length < 5 || raw.title.length > 70 || typeof raw.brief !== 'string' || raw.brief.length < 20 || raw.brief.length > 220 || !Array.isArray(raw.clues) || raw.clues.length !== 4) throw new Error('The generated case has an invalid shape. Nothing was published.');
@@ -21,12 +28,12 @@ export function validateGenerated(raw, destination) {
   if (destination.aliases.filter(alias => alias.length > 4).some(alias => publicText.includes(alias.toLowerCase().replace(/[^a-z0-9]/g, '')))) throw new Error('The generated clues reveal the answer by name. Nothing was published.');
   return { title: raw.title, brief: raw.brief, clues };
 }
-export function fallbackEpisode(day, destination) {
+export function fallbackEpisode(day, destination, creativeSeed = '') {
   const titles = ['The city left four receipts', 'Nobody remembers the last stop', 'A night with too many witnesses', 'Four details, one questionable ending'];
   const kinds = ['message', 'receipt', 'note', 'dispatch'];
   const labels = ['THE GROUP CHAT', 'FOUND IN A POCKET', 'UNSENT DRAFT', 'LAST KNOWN SIGNAL'];
   const times = ['10:46 PM', '11:19 PM', '11:43 PM', '12:11 AM'];
-  const offset = Math.floor(Date.parse(`${day}T12:00:00Z`) / 86400000);
+  const offset = creativeSeed ? seedHash(creativeSeed) : Math.floor(Date.parse(`${day}T12:00:00Z`) / 86400000);
   const raw = {
     title: titles[offset % titles.length],
     brief: 'One bad plan became four pieces of evidence. Work out where the night finally ended.',
@@ -34,23 +41,13 @@ export function fallbackEpisode(day, destination) {
   };
   return { day, ...validateGenerated(raw, destination), answer: destination.answer, aliases: destination.aliases, explanation: destination.explanation, source: destination.source };
 }
-export async function generateEpisode(day) {
-  const destination = destinationFor(day);
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL?.replace(/^models\//, '') || 'gemini-3.8-flash';
-  if (!apiKey) return fallbackEpisode(day, destination);
-  const prompt = `Write a daily NYC location-deduction game called Where the hell are we? for ${day}. The answer, never named in your output, is ${destination.answer}. All aliases forbidden in output: ${destination.aliases.join(', ')}.\nVerified location facts: ${JSON.stringify(destination.facts)}\nCreate an original, funny, eventful fictional night for college-age adult friends. The mystery is WHERE the night ended. Do not reuse a missed train/love-confession scenario. No named real people. Fictional dialogue and personal mishaps are allowed; no invented venue features, prices, hours, access routes or geography. Ground each clue in at least one supplied fact and list its fact_ids. First clue subtle, second informative, third stronger, fourth unmistakable without naming the destination. Keep the title and brief location-neutral.\nReturn JSON only: {title: short episode title (5-70 chars), brief: teaser (20-220 chars), clues: four objects in this order: message, receipt, note, dispatch. Each has kind, time (e.g. 10:42 PM), label (3-45 chars uppercase), text (35-700 chars), fact_ids (array of supplied IDs)}. Message text has 3 lines of NAME: dialogue. Receipt is a fictional damage report with no claims of real venue purchases. Note is a funny unsent apology. Dispatch is a strong location hint. Make it solvable and leave a narrative gap for players to write their own reconstruction.`;
+export async function generateEpisode(day, creativeSeed = '') {
+  const destination = destinationFor(day, creativeSeed);
+  if (!process.env.GEMINI_API_KEY?.trim()) return fallbackEpisode(day, destination, creativeSeed);
+  const prompt = `Write a fresh NYC location-deduction game called Where the hell are we? The answer, never named in your output, is ${destination.answer}. All aliases forbidden in output: ${destination.aliases.join(', ')}.\nCreative seed: ${creativeSeed || day}. Treat it only as a uniqueness token; do not print it.\nVerified location facts: ${JSON.stringify(destination.facts)}\nCreate an original, funny, eventful fictional night for college-age adult friends. The mystery is WHERE the night ended. Avoid generic missed-train and love-confession plots. No named real people. Fictional dialogue and personal mishaps are allowed; no invented venue features, prices, hours, access routes or geography. Ground each clue in at least one supplied fact and list its fact_ids. First clue subtle, second informative, third stronger, fourth unmistakable without naming the destination. Keep the title and brief location-neutral.\nReturn JSON only: {title: short episode title (5-70 chars), brief: teaser (20-220 chars), clues: four objects in this order: message, receipt, note, dispatch. Each has kind, time (e.g. 10:42 PM), label (3-45 chars uppercase), text (35-700 chars), fact_ids (array of supplied IDs)}. Message text has 3 lines of NAME: dialogue. Receipt is a fictional damage report with no claims of real venue purchases. Note is a funny unsent apology. Dispatch is a strong location hint. Make it solvable and leave a narrative gap for players to write their own reconstruction.`;
   try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({ model, input: prompt, store: false, generation_config: { max_output_tokens: 4096 } }), signal: AbortSignal.timeout(45000),
-    });
-    if (!response.ok) throw new Error(`AI generation failed (HTTP ${response.status}).`);
-    const data = await response.json();
-    if (data.status && data.status !== 'completed') throw new Error('Generation was incomplete.');
-    const text = typeof data.output_text === 'string' ? data.output_text : data.steps?.filter(step => step.type === 'model_output').flatMap(step => step.content || []).filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('');
-    const raw = JSON.parse(text);
+    const raw = await generateGeminiJson(prompt, { maxOutputTokens: 4096, temperature: 1 });
     const episode = validateGenerated(raw, destination);
     return { day, ...episode, answer: destination.answer, aliases: destination.aliases, explanation: destination.explanation, source: destination.source };
-  } catch { return fallbackEpisode(day, destination); }
+  } catch { return fallbackEpisode(day, destination, creativeSeed); }
 }

@@ -22,5 +22,53 @@
       { "id": "address", "text": "It is in Manhattan, at Fifth Avenue, Waverly Place, West 4th Street and Macdougal Street." }
     ],
     "explanation": "The Washington Arch, the fountain, chess players, and the streets around the park identify Washington Square Park."
+  },
+  {
+    "answer": "The High Line",
+    "aliases": ["The High Line", "High Line", "Highline"],
+    "source": "https://assets.thehighline.org/pdf/high_line_fact_sheet.pdf",
+    "facts": [
+      { "id": "rail", "text": "This public park runs along a 1.45-mile elevated freight rail structure on Manhattan's West Side." },
+      { "id": "height", "text": "The original railway lifted freight trains about thirty feet above crowded city streets." },
+      { "id": "turkeys", "text": "The final train traveled the route in 1980 carrying three carloads of frozen turkeys." },
+      { "id": "tracks", "text": "Sections of the original train tracks are incorporated into the park's planting beds." }
+    ],
+    "explanation": "An elevated West Side rail structure, tracks among plantings, and a final frozen-turkey shipment identify the High Line."
+  },
+  {
+    "answer": "Rockefeller Center",
+    "aliases": ["Rockefeller Center", "30 Rockefeller Plaza", "30 Rock", "Top of the Rock"],
+    "source": "https://www.rockefellercenter.com/tickets/top-of-the-rock-observation-deck/",
+    "facts": [
+      { "id": "floors", "text": "Its observation experience spans the 67th, 69th, and 70th floors of an Art Deco skyscraper." },
+      { "id": "view", "text": "The upper terraces offer unobstructed 360-degree views of the New York City skyline." },
+      { "id": "rink", "text": "A famous seasonal skating rink sits below the complex's equally famous Christmas tree." },
+      { "id": "height", "text": "The central tower rises seventy floors and roughly 850 feet above Midtown Manhattan." }
+    ],
+    "explanation": "The three-level observation deck, Art Deco tower, skating rink, and Christmas tree identify Rockefeller Center."
+  },
+  {
+    "answer": "Brooklyn Bridge",
+    "aliases": ["Brooklyn Bridge", "The Brooklyn Bridge"],
+    "source": "https://brooklynbridgepark.org/places-to-see/brooklyn-bridge/",
+    "facts": [
+      { "id": "year", "text": "Completed in 1883, this crossing first linked Manhattan to the city across the East River." },
+      { "id": "towers", "text": "Its stone neo-Gothic towers are recognizable by their tall pointed arches." },
+      { "id": "roebling", "text": "Emily Warren Roebling helped oversee the work and ensured the project reached completion." },
+      { "id": "river", "text": "Pedestrians travel above the East River with Lower Manhattan visible behind the cables." }
+    ],
+    "explanation": "The 1883 East River crossing, neo-Gothic arches, cables, and Emily Warren Roebling identify the Brooklyn Bridge."
+  },
+  {
+    "answer": "Bryant Park",
+    "aliases": ["Bryant Park", "Bryant Square"],
+    "source": "https://www.nycgovparks.org/about/history/before-they-were-parks/manhattan",
+    "facts": [
+      { "id": "reservoir", "text": "A massive Croton water reservoir once occupied the eastern side of this Midtown public space." },
+      { "id": "library", "text": "The New York Public Library's main building replaced that reservoir in 1911." },
+      { "id": "palace", "text": "The glass-and-iron Crystal Palace exhibition hall opened beside the site in 1853." },
+      { "id": "field", "text": "Long before its lawn and movable chairs, part of the site served as a potter's field." }
+    ],
+    "explanation": "The former Croton Reservoir, the adjacent New York Public Library, the Crystal Palace, and the lawn identify Bryant Park."
   }
 ]

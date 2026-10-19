@@ -1,5 +1,5 @@
 import type { Clue } from './types';
-import { geminiError } from '../gemini-error';
+import { generateGeminiJson } from './gemini-client.mjs';
 import destinations from './destinations.json';
 
 export type StoryCaseSource = { id: string; alias: string; title: string; body: string };
@@ -57,29 +57,6 @@ export function fallbackStoryCase(story: StoryCaseSource): GeneratedStoryCase {
 }
 
 export async function generateStoryCase(story: StoryCaseSource): Promise<GeneratedStoryCase> {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error('AI case generation is not configured on this deployment yet.');
-  const configuredModel = process.env.GEMINI_MODEL?.trim().replace(/^models\//, '');
-  const models = configuredModel ? [configuredModel] : ['gemini-3.8-flash', 'gemini-3.7-flash'];
-  let response: Response | undefined;
-  for (const model of models) {
-    response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ model, input: storyCasePrompt(story), store: false, generation_config: { max_output_tokens: 2500 } }),
-      signal: AbortSignal.timeout(40000), cache: 'no-store',
-    });
-    if (response.ok || (response.status !== 404 && response.status < 500)) break;
-  }
-  if (!response) throw new Error('The case writer is unavailable. Please try again later.');
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(geminiError(response.status, body));
-  }
-  const result = await response.json();
-  if (result.status && result.status !== 'completed') throw new Error('The AI could not finish this case. Please try again.');
-  const text = typeof result.output_text === 'string' ? result.output_text : result.steps?.filter((step: { type?: string }) => step.type === 'model_output').flatMap((step: { content?: { type?: string; text?: string }[] }) => step.content || []).filter((part: { type?: string; text?: string }) => part.type === 'text' && typeof part.text === 'string').map((part: { text: string }) => part.text).join('');
-  let value: unknown;
-  try { value = JSON.parse(text); } catch { throw new Error('The case writer returned an unreadable game. Please try again.'); }
+  const value = await generateGeminiJson(`${storyCasePrompt(story)}\nCREATIVE SEED: ${globalThis.crypto.randomUUID()}.`, { maxOutputTokens: 2500, temperature: 0.9 });
   return validateStoryCase(value);
 }
