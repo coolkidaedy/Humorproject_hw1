@@ -46,6 +46,7 @@ export async function generateStoryDraft(night: NightState): Promise<StoryDraft>
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const value = await generateGeminiJson(`${storyPrompt(night)}\nCREATIVE SEED: ${globalThis.crypto.randomUUID()}. Use it only to make this draft different from earlier drafts.\nAttempt ${attempt + 1}: keep the body between 500 and 900 characters and never exceed 1,200.`, { maxOutputTokens: 2200, temperature: 1 });
+      console.info('[night-ai:story] Gemini output', JSON.stringify(value));
       if (value && typeof value === 'object' && 'body' in value && typeof value.body === 'string' && value.body.trim().length > 1200) {
         const shortened = value.body.trim().slice(0, 1196).replace(/\s+\S*$/, '').trim();
         return validateStoryDraft({ ...value, body: `${shortened}…` });

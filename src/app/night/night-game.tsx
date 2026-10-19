@@ -101,6 +101,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       const result = await generateNightReconstruction(night.day, night.mode);
       if (result.error) setStoryMessage(result.error);
       else if (result.draft) {
+        console.info('[night-ai:story] Client result', result.draft);
         setTitle(result.draft.title); setBody(result.draft.body); setGenerated(true);
         setStoryMessage(result.fallback ? 'Gemini was unavailable, so your clues were used to build this editable draft.' : '');
       }
@@ -139,6 +140,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       const result = await generateNewPracticeCase();
       if (result.error) { setFeedback(result.error); return; }
       if (result.state) {
+        console.info('[night-ai:new-case] Client result', result.state);
         setNight(result.state); setActiveClue(0); setStarted(true); setGuess(''); setConfirmReveal(false);
         setTitle(''); setBody(''); setGenerated(false); setStoryMessage(''); autoDraftAttempted.current = false;
         try { localStorage.removeItem(storageKey); } catch { /* The new case still works without local storage. */ }

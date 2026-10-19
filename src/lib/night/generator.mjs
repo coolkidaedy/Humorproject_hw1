@@ -78,6 +78,7 @@ export async function generateFreshEpisode(day, creativeSeed, avoidAnswers = [])
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const raw = await generateGeminiJson(`${prompt}\nAttempt token: ${attempt + 1}`, { maxOutputTokens: 5000, temperature: 1.1 });
+      console.info('[night-ai:new-case] Gemini output', JSON.stringify(raw));
       const episode = validateFreshGenerated(raw, avoidAnswers);
       return { day, ...episode };
     } catch (error) { lastError = error; }
