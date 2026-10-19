@@ -48,6 +48,8 @@ export async function loadNight(): Promise<{ state: NightState; loggedIn: boolea
     loggedIn = Boolean(user);
     playerId = user?.id || null;
     if (user) {
+      const generated = await readPractice();
+      if (generated.episode) return { state: practiceState(generated), loggedIn, playerId };
       const { data, error } = await supabase.rpc('night_play', { action_name: 'state', guess_text: '' });
       if (!error && data && !data.error) return { state: data as NightState, loggedIn, playerId };
     }
@@ -60,5 +62,5 @@ export async function loadCommunity(day: string): Promise<Community> {
     const { data, error } = await supabase.rpc('night_community', { requested_day: day });
     if (!error && data) return { ...data, available: true };
   } catch { /* No invented users, votes or rankings in the fallback. */ }
-  return { stories: [], leaders: [], available: false, error: 'The live community is not connected yet. Your practice story can still be saved on this device.' };
+  return { stories: [], leaders: [], available: false, error: 'The community feed is temporarily unavailable. Your draft is still safe in this browser.' };
 }

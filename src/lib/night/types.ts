@@ -5,7 +5,7 @@ export type NightState = {
   clues: Clue[]; guesses: GuessAttempt[]; revealed: number; wrong: number; finished: boolean; solved: boolean; score: number;
   answer?: string; explanation?: string; source?: string;
 };
-export type Story = { id: string; alias: string; title: string; body: string; votes: number; mine: boolean; voted: boolean; day: string; playable?: boolean };
+export type Story = { id: string; alias: string; title: string; body: string; votes: number; mine: boolean; voted: boolean; day: string; playable?: boolean; sourceKind?: 'daily' | 'generated' };
 export type Leader = { alias: string; points: number; nights: number; votes: number; mine: boolean };
 export type Community = { stories: Story[]; leaders: Leader[]; dailyLeaders?: Leader[]; available: boolean; error?: string };
 export type GameResult = { state?: NightState; error?: string; message?: string };

@@ -53,13 +53,19 @@ export async function generateNewPracticeCase(): Promise<GameResult> {
     return { state: practiceState(progress), message: 'New NYC case generated. Start with the first clue.' };
   } catch { return { error: 'Gemini could not create a new NYC case. Please try again.' }; }
 }
-export async function submitNightStory(day: string, title: string, body: string, alias: string) {
+export async function submitNightStory(day: string, title: string, body: string, alias: string, mode: 'live' | 'practice') {
   const input = validStory(title, body, alias);
   if (!input) return { error: 'Use a 3–80 character title, an 80–1,200 character story, and a 3–20 character handle (letters, numbers, underscores).' };
+  if (!['live', 'practice'].includes(mode)) return { error: 'That story cannot be posted.' };
   if (day !== newYorkDay()) return { error: 'This night has closed. Refresh for the new case.' };
   try {
+    if (mode === 'practice') {
+      const generatedRun = await readPractice();
+      if (!generatedRun.finished) return { error: 'Finish the case before posting its story.' };
+    }
     const supabase = await serverSupabase();
-    const { data, error } = await supabase.rpc('night_submit_story', { story_title: input.title, story_body: input.body, player_alias: input.alias });
+    const rpc = mode === 'practice' ? 'night_submit_generated_story' : 'night_submit_story';
+    const { data, error } = await supabase.rpc(rpc, { story_title: input.title, story_body: input.body, player_alias: input.alias });
     if (error) return { error: 'Your story couldn’t be published. Please retry.' };
     if (data?.error) return { error: data.error };
     revalidatePath('/');
