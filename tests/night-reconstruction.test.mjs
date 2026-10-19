@@ -80,9 +80,9 @@ test('finished practice players can generate from their hints without an account
   try{
     user=null;savedPractice=null;current={...finished(),mode:'practice',storyGenerations:1};
     const result=await generateNightReconstruction(rules.newYorkDay(),'practice');
-    assert.deepEqual(result.draft,draft);assert.equal(result.remaining,1);assert.equal(savedPractice.storyGenerations,2);
-    current={...current,storyGenerations:3};
-    assert.match((await generateNightReconstruction(rules.newYorkDay(),'practice')).error,/three practice drafts/);
+    assert.deepEqual(result.draft,draft);assert.equal(result.remaining,8);assert.equal(savedPractice.storyGenerations,2);
+    current={...current,storyGenerations:10};
+    assert.match((await generateNightReconstruction(rules.newYorkDay(),'practice')).error,/ten practice drafts/);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
 });
 test('a new practice case resets play and keeps a real NYC answer with its clues',async()=>{

@@ -9,6 +9,8 @@ import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-gen
 import { generateFreshEpisode } from '@/lib/night/generator.mjs';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
 
+const practiceDraftLimit = 10;
+
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
   if (!['state', 'reveal', 'guess', 'giveup', 'restart'].includes(action) || !['live', 'practice'].includes(mode)) return { error: 'That move is unavailable.' };
   if (day !== newYorkDay()) return { error: 'A new night has started. Refresh to play today’s case.' };
@@ -111,8 +113,8 @@ export async function generateNightReconstruction(day: string, mode: 'live' | 'p
       remaining = budget.remaining as number;
     } else {
       if (!practiceProgress) return { error: 'Sign in to generate a story for this case.' };
-      if (practiceProgress.storyGenerations >= 3) return { error: 'You’ve used today’s three practice drafts. You can still edit your current story.' };
-      remaining = 2 - practiceProgress.storyGenerations;
+      if (practiceProgress.storyGenerations >= practiceDraftLimit) return { error: 'You’ve used this case’s ten practice drafts. You can still edit your current story or generate a new case.' };
+      remaining = practiceDraftLimit - practiceProgress.storyGenerations - 1;
       commitPracticeGeneration = true;
     }
     let fallback = false;

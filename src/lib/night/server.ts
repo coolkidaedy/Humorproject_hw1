@@ -22,7 +22,7 @@ export async function readPractice(): Promise<PracticeProgress> {
     const expected = createHmac('sha256', practiceSecret).update(body || '').digest('hex');
     if (!signature || signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return initial;
     const value = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], recentAnswers: Array.isArray(value.recentAnswers) ? value.recentAnswers.filter((answer: unknown) => typeof answer === 'string').slice(-8) : [], storyGenerations: value.storyGenerationVersion === 2 && Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0, storyGenerationVersion: 2 } : initial;
+    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], recentAnswers: Array.isArray(value.recentAnswers) ? value.recentAnswers.filter((answer: unknown) => typeof answer === 'string').slice(-8) : [], storyGenerations: value.storyGenerationVersion === 2 && Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(10, value.storyGenerations)) : 0, storyGenerationVersion: 2 } : initial;
   } catch { return initial; }
 }
 export async function savePractice(progress: PracticeProgress) {
