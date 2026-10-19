@@ -28,6 +28,25 @@ export function validateGenerated(raw, destination) {
   if (destination.aliases.filter(alias => alias.length > 4).some(alias => publicText.includes(alias.toLowerCase().replace(/[^a-z0-9]/g, '')))) throw new Error('The generated clues reveal the answer by name. Nothing was published.');
   return { title: raw.title, brief: raw.brief, clues };
 }
+export function validateFreshGenerated(raw, avoidAnswers = []) {
+  if (!raw || typeof raw !== 'object' || typeof raw.answer !== 'string' || !Array.isArray(raw.aliases) || typeof raw.explanation !== 'string' || !Array.isArray(raw.facts)) throw new Error('Gemini did not return a complete NYC case.');
+  const answer = raw.answer.trim();
+  const aliases = Array.from(new Set([answer, ...raw.aliases.filter(alias => typeof alias === 'string').map(alias => alias.trim()).filter(Boolean)]));
+  const normalized = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (answer.length < 3 || answer.length > 100 || aliases.length < 2 || aliases.length > 6 || raw.explanation.trim().length < 30 || raw.explanation.trim().length > 500) throw new Error('Gemini returned an invalid NYC destination.');
+  if (avoidAnswers.some(previous => normalized(previous) === normalized(answer))) throw new Error('Gemini repeated a recent destination.');
+  if (raw.facts.length !== 4) throw new Error('Gemini did not provide four location facts.');
+  const factIds = new Set();
+  const facts = raw.facts.map(fact => {
+    if (!fact || typeof fact !== 'object' || typeof fact.id !== 'string' || !/^[a-z0-9_-]{2,40}$/i.test(fact.id) || factIds.has(fact.id) || typeof fact.text !== 'string' || fact.text.trim().length < 35 || fact.text.trim().length > 350) throw new Error('Gemini returned an invalid location fact.');
+    factIds.add(fact.id);
+    return { id: fact.id, text: fact.text.trim() };
+  });
+  const destination = { answer, aliases, facts };
+  const episode = validateGenerated(raw, destination);
+  const source = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${answer}, New York, NY`)}`;
+  return { ...episode, answer, aliases, explanation: raw.explanation.trim(), source };
+}
 export function fallbackEpisode(day, destination, creativeSeed = '') {
   const titles = ['The city left four receipts', 'Nobody remembers the last stop', 'A night with too many witnesses', 'Four details, one questionable ending'];
   const kinds = ['message', 'receipt', 'note', 'dispatch'];
@@ -50,4 +69,18 @@ export async function generateEpisode(day, creativeSeed = '') {
     const episode = validateGenerated(raw, destination);
     return { day, ...episode, answer: destination.answer, aliases: destination.aliases, explanation: destination.explanation, source: destination.source };
   } catch { return fallbackEpisode(day, destination, creativeSeed); }
+}
+
+export async function generateFreshEpisode(day, creativeSeed, avoidAnswers = []) {
+  if (!validDay(day)) throw new Error('Use a valid YYYY-MM-DD date.');
+  const prompt = `Create a completely new case for the NYC location-deduction game "Where the hell are we?". You choose the answer. It must be one specific, real, publicly recognizable place inside New York City: a landmark, park, building, station, museum, street feature, or public venue. Do not use any of these recent answers: ${JSON.stringify(avoidAnswers)}. Do not choose a vague neighborhood, borough, chain, or temporary event.\nCreative seed: ${creativeSeed}. Use it to choose an unexpected destination and story; never print the seed.\nReturn JSON only with: answer, aliases, explanation, facts, title, brief, clues. "aliases" has 2–5 ordinary variants. "explanation" explains why the clues identify the answer. "facts" has exactly four objects with a short unique id and a factually accurate text detail about the location. Use facts you are confident are true; do not invent hours, prices, addresses, or venue features.\nThe four clues form an original, funny, eventful fictional night among college-age adult friends. Never name the answer or any alias in the title, brief, or clues. The clue kinds, in order, are message, receipt, note, dispatch. Each clue has kind, time like 10:42 PM, an uppercase label, text, and fact_ids listing one or more of the four fact ids it uses. Make clue one subtle, clue two informative, clue three stronger, and clue four unmistakable without naming the place. Message text has three lines of NAME: dialogue. Receipt is a fictional incident record, not a claim about real purchases. Keep title 5–70 characters, brief 20–220, and each clue 35–700. Avoid generic missed-train and love-confession plots. No real people, defamatory claims, or unsafe content.`;
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await generateGeminiJson(`${prompt}\nAttempt token: ${attempt + 1}`, { maxOutputTokens: 5000, temperature: 1.1 });
+      const episode = validateFreshGenerated(raw, avoidAnswers);
+      return { day, ...episode };
+    } catch (error) { lastError = error; }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Gemini could not create a valid NYC case.');
 }

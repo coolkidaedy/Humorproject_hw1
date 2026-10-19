@@ -13,7 +13,7 @@ const processState = globalThis as typeof globalThis & { nightPracticeSecret?: s
 const configuredPracticeSecret = process.env.GAME_SESSION_SECRET || (process.env.GEMINI_API_KEY ? createHash('sha256').update(`wth-practice:${process.env.GEMINI_API_KEY}`).digest('hex') : '');
 const practiceSecret = configuredPracticeSecret || (processState.nightPracticeSecret ??= randomBytes(32).toString('hex'));
 const cookieName = 'wth-practice-v1';
-export type PracticeProgress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number; storyGenerationVersion: number; episode?: PracticeEpisode };
+export type PracticeProgress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number; storyGenerationVersion: number; recentAnswers?: string[]; episode?: PracticeEpisode };
 export async function readPractice(): Promise<PracticeProgress> {
   const initial: PracticeProgress = { guesses: [], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: 0, storyGenerationVersion: 2 };
   try {
@@ -22,7 +22,7 @@ export async function readPractice(): Promise<PracticeProgress> {
     const expected = createHmac('sha256', practiceSecret).update(body || '').digest('hex');
     if (!signature || signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return initial;
     const value = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], storyGenerations: value.storyGenerationVersion === 2 && Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0, storyGenerationVersion: 2 } : initial;
+    return value.day === initial.day ? { ...value, guesses: Array.isArray(value.guesses) ? value.guesses : [], recentAnswers: Array.isArray(value.recentAnswers) ? value.recentAnswers.filter((answer: unknown) => typeof answer === 'string').slice(-8) : [], storyGenerations: value.storyGenerationVersion === 2 && Number.isInteger(value.storyGenerations) ? Math.max(0, Math.min(3, value.storyGenerations)) : 0, storyGenerationVersion: 2 } : initial;
   } catch { return initial; }
 }
 export async function savePractice(progress: PracticeProgress) {
@@ -32,8 +32,8 @@ export async function savePractice(progress: PracticeProgress) {
 }
 export function practiceState(progress: PracticeProgress): NightState {
   const episode = progress.episode || practiceNight;
-  const { storyGenerations: _storyGenerations, storyGenerationVersion: _storyGenerationVersion, episode: _episode, ...publicProgress } = progress;
-  void _storyGenerations; void _storyGenerationVersion; void _episode;
+  const { storyGenerations: _storyGenerations, storyGenerationVersion: _storyGenerationVersion, recentAnswers: _recentAnswers, episode: _episode, ...publicProgress } = progress;
+  void _storyGenerations; void _storyGenerationVersion; void _recentAnswers; void _episode;
   return { ...publicProgress, mode: 'practice', number: 0, title: episode.title, brief: episode.brief,
     clues: episode.clues.slice(0, progress.finished ? 4 : progress.revealed), score: deductionScore(progress.revealed, progress.wrong, progress.solved),
     ...(progress.finished ? { answer: episode.answer, explanation: episode.explanation, source: episode.source } : {}),

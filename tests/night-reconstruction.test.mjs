@@ -49,12 +49,10 @@ test('AI reconstruction strips thought content, validates JSON, and keeps provid
 });
 let user={id:'verified-user'}, current=finished(), calls=0, budgetCalls=0, savedPractice=null, caseSource={ready:false,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',alias:'nightowl',title:'A night',body:'We ended at Grand Central Terminal after the apology crossed the whispering gallery.'}, savedCase=null;
 globalThis.nightActionTest={
-  ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async value=>{savedPractice=value;},practiceNight:{aliases:['Grand Central']},
+  ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async value=>{savedPractice=value;},practiceNight:{answer:'Grand Central Terminal',aliases:['Grand Central']},
   fallbackStoryDraft:()=>draft,
   fallbackStoryCase:()=>({title:'Fallback case',brief:'Four details survived the night and point to one last stop.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clues point to Grand Central Terminal.',clues:[]}),
-  nextDay:day=>new Date(Date.parse(`${day}T12:00:00Z`)+86400000).toISOString().slice(0,10),
-  destinationFor:()=>({answer:'Washington Square Park'}),
-  generateEpisode:async day=>({day,title:'The arch after midnight',brief:'Four details from a very questionable walk through downtown.',answer:'Washington Square Park',aliases:['Washington Square Park','Washington Square'],explanation:'The arch, fountain, and chess tables identify Washington Square Park.',source:'https://nycgovparks.org/parks/washington-square-park',clues:[{kind:'message',time:'10:00 PM',label:'TEXT',text:'Meet by the marble arch after the fountain.'}]}),
+  generateFreshEpisode:async (day,_seed,avoid)=>{assert.ok(avoid.includes('Grand Central Terminal'));return {day,title:'The arch after midnight',brief:'Four details from a very questionable walk through downtown.',answer:'Washington Square Park',aliases:['Washington Square Park','Washington Square'],explanation:'The arch, fountain, and chess tables identify Washington Square Park.',source:'https://www.google.com/maps',clues:[{kind:'message',time:'10:00 PM',label:'TEXT',text:'Meet by the marble arch after the fountain.'}]};},
   generateStoryDraft:async night=>{calls++;assert.deepEqual(night.guesses,finished().guesses);return draft;},
   generateStoryCase:async source=>{assert.deepEqual(source,{id:caseSource.id,alias:caseSource.alias,title:caseSource.title,body:caseSource.body});return {title:'Echo case',brief:'A missed train carried one apology too far.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clock and whispering corners point to Grand Central Terminal.',clues:[]};},
   serverSupabase:async()=>({auth:{getUser:async()=>({data:{user}})},rpc:async(name,args)=>{
@@ -67,7 +65,7 @@ globalThis.nightActionTest={
   }}),
 };
 const actionSource=readFileSync(new URL('../src/app/night/actions.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-const {generateNewPracticeCase,generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,nextDay,destinationFor,generateEpisode,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
+const {generateNewPracticeCase,generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,generateFreshEpisode,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
 test('reconstruction action requires identity, a finished run and server-fetched guess history before calling AI',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{
@@ -94,6 +92,8 @@ test('a new practice case resets play and keeps a real NYC answer with its clues
   assert.equal(savedPractice.finished,false);
   assert.equal(savedPractice.revealed,1);
   assert.equal(savedPractice.episode.title,'The arch after midnight');
+  assert.equal(savedPractice.storyGenerations,0);
+  assert.deepEqual(savedPractice.recentAnswers,['Grand Central Terminal','Washington Square Park']);
   assert.equal(result.message,'New NYC case generated. Start with the first clue.');
 });
 test('community case generation reads the published story on the server and saves only validated AI output',async()=>{

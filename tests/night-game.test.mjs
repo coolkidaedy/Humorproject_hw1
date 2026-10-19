@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { dateInNewYork, nextDay, validDay, destinationFor, validateGenerated, generateEpisode } from '../src/lib/night/generator.mjs';
+import { dateInNewYork, nextDay, validDay, destinationFor, validateGenerated, validateFreshGenerated, generateEpisode, generateFreshEpisode } from '../src/lib/night/generator.mjs';
 const source = readFileSync(new URL('../src/lib/night/rules.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
 const { newYorkDay, normalizeAnswer, deductionScore, validStory } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
@@ -49,4 +49,21 @@ test('generator uses one daily destination, keeps thought text out, and falls ba
     globalThis.fetch=async()=>new Response(JSON.stringify({status:'incomplete'}));
     assert.equal((await generateEpisode('2026-10-13')).clues.length,4);
   } finally { globalThis.fetch=originalFetch; if(originalKey===undefined) delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey; }
+});
+test('fresh generator accepts Gemini-chosen NYC places and rejects recent repeats', async () => {
+  const fresh={...fixture(),answer:'Prospect Park Boathouse',aliases:['Prospect Park Boathouse','The Boathouse'],explanation:'The lake, historic boathouse, and surrounding park details point to the Prospect Park Boathouse.',facts:[
+    {id:'lake',text:'A historic building sits beside a lake inside a large public park in Brooklyn.'},
+    {id:'arches',text:'The waterside structure is recognized for its arched openings and formal terrace.'},
+    {id:'park',text:'The surrounding landscaped park was designed in the nineteenth century.'},
+    {id:'use',text:'The restored building is used as a public event and gathering space.'},
+  ]};
+  fresh.clues=fresh.clues.map((clue,index)=>({...clue,fact_ids:[fresh.facts[index].id]}));
+  assert.equal(validateFreshGenerated(fresh,[]).answer,'Prospect Park Boathouse');
+  assert.throws(()=>validateFreshGenerated(fresh,['Prospect Park Boathouse']),/repeated/);
+  const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY='test-only';
+  try {
+    globalThis.fetch=async url=>String(url).includes('?pageSize=')?new Response(JSON.stringify({models:[{name:'models/gemini-test-flash',supportedGenerationMethods:['generateContent']}]})):new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(fresh)}]}}]}));
+    assert.equal((await generateFreshEpisode('2026-10-19','unique-seed',['Grand Central Terminal'])).answer,'Prospect Park Boathouse');
+  } finally { globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey; }
 });

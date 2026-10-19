@@ -6,7 +6,7 @@ import { practiceNight } from '@/lib/night/practice';
 import { newYorkDay, normalizeAnswer, validStory } from '@/lib/night/rules';
 import { fallbackStoryDraft, generateStoryDraft } from '@/lib/night/story-generator';
 import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-generator';
-import { destinationFor, generateEpisode } from '@/lib/night/generator.mjs';
+import { generateFreshEpisode } from '@/lib/night/generator.mjs';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
 
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
@@ -23,7 +23,7 @@ export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' 
       return { state: data, message: action === 'guess' && !data.finished ? 'Not quite. Follow the evidence. −100 points.' : undefined };
     }
     const savedProgress = await readPractice();
-    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations, storyGenerationVersion: savedProgress.storyGenerationVersion, episode: savedProgress.episode } : savedProgress;
+    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations, storyGenerationVersion: savedProgress.storyGenerationVersion, recentAnswers: savedProgress.recentAnswers, episode: savedProgress.episode } : savedProgress;
     if (!progress.finished) {
       if (action === 'reveal') progress.revealed = Math.min(4, progress.revealed + 1);
       if (action === 'giveup') progress.finished = true;
@@ -43,15 +43,13 @@ export async function generateNewPracticeCase(): Promise<GameResult> {
   try {
     const current = await readPractice();
     const currentAnswer = current.episode?.answer || practiceNight.answer;
-    const seedDay = newYorkDay();
-    let creativeSeed = globalThis.crypto.randomUUID();
-    while (destinationFor(seedDay, creativeSeed).answer === currentAnswer) creativeSeed = globalThis.crypto.randomUUID();
-    const generated = await generateEpisode(seedDay, creativeSeed);
+    const recentAnswers = Array.from(new Set([...(current.recentAnswers || []), currentAnswer])).slice(-8);
+    const generated = await generateFreshEpisode(newYorkDay(), globalThis.crypto.randomUUID(), recentAnswers);
     const episode = { title: generated.title, brief: generated.brief, answer: generated.answer, aliases: generated.aliases, explanation: generated.explanation, source: generated.source, clues: generated.clues };
-    const progress = { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: current.storyGenerations, storyGenerationVersion: current.storyGenerationVersion, episode };
+    const progress = { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: 0, storyGenerationVersion: current.storyGenerationVersion, recentAnswers: [...recentAnswers, generated.answer].slice(-8), episode };
     await savePractice(progress);
     return { state: practiceState(progress), message: 'New NYC case generated. Start with the first clue.' };
-  } catch { return { error: 'The new case could not be generated. Please try again.' }; }
+  } catch { return { error: 'Gemini could not create a new NYC case. Please try again.' }; }
 }
 export async function submitNightStory(day: string, title: string, body: string, alias: string) {
   const input = validStory(title, body, alias);
