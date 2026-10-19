@@ -1,14 +1,15 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { serverSupabase } from '@/lib/supabase/server';
 import { practiceNight } from './practice';
 import { deductionScore, newYorkDay } from './rules';
 import type { Community, NightState, GuessAttempt } from './types';
 
-// Practice has no ranked rewards. A stable secret is optional; restarts may reset practice.
+// Practice has no ranked rewards. Derive a stable fallback on multi-instance deployments.
 const processState = globalThis as typeof globalThis & { nightPracticeSecret?: string };
-const practiceSecret = process.env.GAME_SESSION_SECRET || (processState.nightPracticeSecret ??= randomBytes(32).toString('hex'));
+const configuredPracticeSecret = process.env.GAME_SESSION_SECRET || (process.env.GEMINI_API_KEY ? createHash('sha256').update(`wth-practice:${process.env.GEMINI_API_KEY}`).digest('hex') : '');
+const practiceSecret = configuredPracticeSecret || (processState.nightPracticeSecret ??= randomBytes(32).toString('hex'));
 const cookieName = 'wth-practice-v1';
 type Progress = { guesses: GuessAttempt[]; day: string; revealed: number; wrong: number; finished: boolean; solved: boolean; storyGenerations: number };
 export async function readPractice(): Promise<Progress> {

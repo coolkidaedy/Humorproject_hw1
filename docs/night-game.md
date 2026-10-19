@@ -14,7 +14,7 @@ Run `npm run dev`. Without the live database migration and episode, the site ser
 4. Review `.night-drafts/YYYY-MM-DD.json`, particularly that location hints are true and form a solvable progression. Publish the reviewed draft: `node --env-file=.env.local scripts/generate-night.mjs --day=YYYY-MM-DD --from=.night-drafts/YYYY-MM-DD.json --publish`.
 5. Sign in through the existing Google flow. An available shared episode opens ranked play automatically.
 
-A stable, random `GAME_SESSION_SECRET` preserves unranked practice progress across server restarts. It is optional and does not authorize ranked scores.
+A stable, random `GAME_SESSION_SECRET` preserves unranked practice progress across server restarts and key rotations. If omitted, deployments with `GEMINI_API_KEY` derive a separate practice-cookie signature from that server-only secret so progress remains valid across Vercel instances. Neither value authorizes ranked scores.
 
 ## Daily generation
 
