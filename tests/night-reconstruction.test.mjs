@@ -49,6 +49,9 @@ globalThis.nightActionTest={
   ...rules,revalidatePath:()=>{},loadCommunity:async()=>({}),practiceState:value=>value,readPractice:async()=>current,savePractice:async value=>{savedPractice=value;},practiceNight:{aliases:['Grand Central']},
   fallbackStoryDraft:()=>draft,
   fallbackStoryCase:()=>({title:'Fallback case',brief:'Four details survived the night and point to one last stop.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clues point to Grand Central Terminal.',clues:[]}),
+  nextDay:day=>new Date(Date.parse(`${day}T12:00:00Z`)+86400000).toISOString().slice(0,10),
+  destinationFor:()=>({answer:'Washington Square Park'}),
+  generateEpisode:async day=>({day,title:'The arch after midnight',brief:'Four details from a very questionable walk through downtown.',answer:'Washington Square Park',aliases:['Washington Square Park','Washington Square'],explanation:'The arch, fountain, and chess tables identify Washington Square Park.',source:'https://nycgovparks.org/parks/washington-square-park',clues:[{kind:'message',time:'10:00 PM',label:'TEXT',text:'Meet by the marble arch after the fountain.'}]}),
   generateStoryDraft:async night=>{calls++;assert.deepEqual(night.guesses,finished().guesses);return draft;},
   generateStoryCase:async source=>{assert.deepEqual(source,{id:caseSource.id,alias:caseSource.alias,title:caseSource.title,body:caseSource.body});return {title:'Echo case',brief:'A missed train carried one apology too far.',answer:'Grand Central Terminal',aliases:['Grand Central Terminal','Grand Central'],explanation:'The clock and whispering corners point to Grand Central Terminal.',clues:[]};},
   serverSupabase:async()=>({auth:{getUser:async()=>({data:{user}})},rpc:async(name,args)=>{
@@ -61,7 +64,7 @@ globalThis.nightActionTest={
   }}),
 };
 const actionSource=readFileSync(new URL('../src/app/night/actions.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-const {generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
+const {generateNewPracticeCase,generateNightReconstruction,prepareStoryCase,playStoryCase}=await import(compile(`const {newYorkDay,normalizeAnswer,validStory,revalidatePath,loadCommunity,practiceState,readPractice,savePractice,practiceNight,fallbackStoryDraft,generateStoryDraft,fallbackStoryCase,generateStoryCase,nextDay,destinationFor,generateEpisode,serverSupabase}=globalThis.nightActionTest;\n${actionSource}`));
 test('reconstruction action requires identity, a finished run and server-fetched guess history before calling AI',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';
   try{
@@ -80,6 +83,15 @@ test('finished practice players can generate from their hints without an account
     current={...current,storyGenerations:3};
     assert.match((await generateNightReconstruction(rules.newYorkDay(),'practice')).error,/three practice drafts/);
   }finally{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;}
+});
+test('a new practice case resets play and keeps a real NYC answer with its clues',async()=>{
+  savedPractice=null;current={...finished(),mode:'practice',storyGenerations:1,storyGenerationVersion:2};
+  const result=await generateNewPracticeCase();
+  assert.equal(savedPractice.episode.answer,'Washington Square Park');
+  assert.equal(savedPractice.finished,false);
+  assert.equal(savedPractice.revealed,1);
+  assert.equal(savedPractice.episode.title,'The arch after midnight');
+  assert.equal(result.message,'New NYC case generated. Start with the first clue.');
 });
 test('community case generation reads the published story on the server and saves only validated AI output',async()=>{
   const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='test-only';

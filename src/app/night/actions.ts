@@ -6,6 +6,7 @@ import { practiceNight } from '@/lib/night/practice';
 import { newYorkDay, normalizeAnswer, validStory } from '@/lib/night/rules';
 import { fallbackStoryDraft, generateStoryDraft } from '@/lib/night/story-generator';
 import { fallbackStoryCase, generateStoryCase } from '@/lib/night/story-case-generator';
+import { destinationFor, generateEpisode, nextDay } from '@/lib/night/generator.mjs';
 import type { GameResult, GuessAttempt, NightState, StoryCaseResult } from '@/lib/night/types';
 
 export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' | 'restart', guess: string, mode: 'live' | 'practice', day: string): Promise<GameResult> {
@@ -22,12 +23,13 @@ export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' 
       return { state: data, message: action === 'guess' && !data.finished ? 'Not quite. Follow the evidence. −100 points.' : undefined };
     }
     const savedProgress = await readPractice();
-    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations, storyGenerationVersion: savedProgress.storyGenerationVersion } : savedProgress;
+    const progress = action === 'restart' ? { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: savedProgress.storyGenerations, storyGenerationVersion: savedProgress.storyGenerationVersion, episode: savedProgress.episode } : savedProgress;
     if (!progress.finished) {
       if (action === 'reveal') progress.revealed = Math.min(4, progress.revealed + 1);
       if (action === 'giveup') progress.finished = true;
       if (action === 'guess') {
-        progress.solved = practiceNight.aliases.some(alias => normalizeAnswer(alias) === normalizeAnswer(guess));
+        const aliases = progress.episode?.aliases || practiceNight.aliases;
+        progress.solved = aliases.some(alias => normalizeAnswer(alias) === normalizeAnswer(guess));
         progress.guesses.push({ place: guess.trim(), clueCount: progress.revealed, correct: progress.solved });
         if (progress.solved) progress.finished = true;
         else { progress.wrong += 1; if (progress.wrong >= 3) progress.finished = true; }
@@ -36,6 +38,19 @@ export async function playNight(action: 'state' | 'reveal' | 'guess' | 'giveup' 
     await savePractice(progress);
     return { state: practiceState(progress), message: action === 'guess' && !progress.finished ? 'Not quite. Follow the evidence. −100 points.' : undefined };
   } catch { return { error: 'Connection interrupted. Your last saved move is safe; please retry.' }; }
+}
+export async function generateNewPracticeCase(): Promise<GameResult> {
+  try {
+    const current = await readPractice();
+    const currentAnswer = current.episode?.answer || practiceNight.answer;
+    let seedDay = nextDay(newYorkDay());
+    while (destinationFor(seedDay).answer === currentAnswer) seedDay = nextDay(seedDay);
+    const generated = await generateEpisode(seedDay);
+    const episode = { title: generated.title, brief: generated.brief, answer: generated.answer, aliases: generated.aliases, explanation: generated.explanation, source: generated.source, clues: generated.clues };
+    const progress = { guesses: [] as GuessAttempt[], day: newYorkDay(), revealed: 1, wrong: 0, finished: false, solved: false, storyGenerations: current.storyGenerations, storyGenerationVersion: current.storyGenerationVersion, episode };
+    await savePractice(progress);
+    return { state: practiceState(progress), message: 'New NYC case generated. Start with the first clue.' };
+  } catch { return { error: 'The new case could not be generated. Please try again.' }; }
 }
 export async function submitNightStory(day: string, title: string, body: string, alias: string) {
   const input = validStory(title, body, alias);

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import type { Clue, Community, NightState, Story } from '@/lib/night/types';
 import { deductionScore, newYorkDay, validStory } from '@/lib/night/rules';
-import { generateNightReconstruction, playNight, prepareStoryCase, refreshCommunity, submitNightStory, voteNightStory } from './actions';
+import { generateNewPracticeCase, generateNightReconstruction, playNight, prepareStoryCase, refreshCommunity, submitNightStory, voteNightStory } from './actions';
 
 type SymbolName = 'arrow' | 'pin' | 'lock' | 'star' | 'check' | 'clock';
 function Symbol({ name, size = 20 }: { name: SymbolName; size?: number }) {
@@ -71,6 +71,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   const [rankPeriod, setRankPeriod] = useState<'daily' | 'all'>('daily');
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const [confirmReveal, setConfirmReveal] = useState(false);
+  const [newCaseGenerating, setNewCaseGenerating] = useState(false);
   const gameRef = useRef<HTMLElement>(null);
   const howRef = useRef<HTMLDialogElement>(null);
   const storageKey = `wth-draft-v2-${playerId || 'guest'}-${night.mode}-${night.day}`;
@@ -126,6 +127,19 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
       if (result.state) { setNight(result.state); setActiveClue(0); setStarted(false); autoDraftAttempted.current = false; setFeedback(''); setGuess(''); setConfirmReveal(false); }
     });
   }
+  async function generateNewCase() {
+    setNewCaseGenerating(true); setFeedback('');
+    try {
+      const result = await generateNewPracticeCase();
+      if (result.error) { setFeedback(result.error); return; }
+      if (result.state) {
+        setNight(result.state); setActiveClue(0); setStarted(true); setGuess(''); setConfirmReveal(false);
+        setTitle(''); setBody(''); setGenerated(false); setLocalStory(null); setStoryMessage(''); setDraftsRemaining(null); autoDraftAttempted.current = false;
+        try { localStorage.removeItem(storageKey); } catch { /* The new case still works without local storage. */ }
+        setFeedback(result.message || 'New NYC case generated.');
+      }
+    } finally { setNewCaseGenerating(false); }
+  }
   function clearPracticeDraft() {
     try { localStorage.removeItem(storageKey); } catch { /* Still clear the current editor. */ }
     autoDraftAttempted.current = true; setTitle(''); setBody(''); setAlias(''); setGenerated(false); setLocalStory(null); setStoryMessage('Practice draft cleared.');
@@ -174,7 +188,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId }: { i
   else return;
   e.preventDefault(); setActiveClue(next); document.getElementById(`clue-tab-${next}`)?.focus();
 }} onClick={() => setActiveClue(i)} className={activeClue === i ? 'selected' : ''}>{i >= night.clues.length ? <Symbol name="lock" size={13}/> : String(i + 1).padStart(2, '0')}</button>)}</div><div role="tabpanel" id="clue-panel" aria-labelledby={`clue-tab-${activeClue}`}><Evidence clue={night.clues[activeClue]} index={activeClue}/></div><p className="fiction-note">Fictional night. Real location. Read between the bad decisions.</p></div><div className="deduction-panel">{night.finished ? <div className="solved-panel"><span className="result-stamp">{night.solved ? 'CASE CRACKED' : 'CASE CLOSED'}</span><p className="small-label">YOU ENDED UP AT</p><h3>{night.answer}</h3><p>{night.explanation}</p>{night.source && <a className="source-link" href={night.source} target="_blank" rel="noreferrer">The real-world evidence ↗</a>}<div className="score-result"><strong>{night.score}</strong><span>DEDUCTION<br/>POINTS{night.mode === 'practice' ? ' · PRACTICE' : ''}</span></div><a href="#write-story" className="primary-button">Generate story from these hints <Symbol name="arrow"/></a><button className="text-button share-button" onClick={share}>{sharing ? 'Copied to clipboard ✓' : 'Share your result ↗'}</button></div> : <><div className="score-meter"><span className="small-label">POINTS STILL ON THE TABLE</span><strong key={potential}>{potential.toLocaleString()}<span>PTS</span></strong><div className="score-bars">{Array.from({ length: 10 }, (_, i) => <i className={i < potential / 100 ? 'filled' : ''} key={i}/>)}</div></div><form onSubmit={e => { e.preventDefault(); move('guess'); }}><label htmlFor="location-guess">Where did we end up?</label><div className="guess-input"><Symbol name="pin" size={19}/><input id="location-guess" value={guess} onChange={e => setGuess(e.target.value)} placeholder="Name the NYC spot…" required maxLength={120} disabled={pending} autoComplete="off"/></div><button disabled={pending || !guess.trim()} className="primary-button guess-button">{pending ? 'Checking the evidence…' : 'Lock in my guess'}<Symbol name="arrow"/></button></form><div className="guess-count"><span>{3 - night.wrong} GUESSES LEFT</span><span>WRONG GUESS −100</span></div><div className="next-clue"><p>Need something to go on?</p><button className="text-button" disabled={pending || night.revealed >= 4} onClick={() => move('reveal')}>{night.revealed >= 4 ? 'All evidence revealed' : 'Reveal the next clue'}{night.revealed < 4 && <span className="cost-chip">−200 PTS</span>}</button></div>{confirmReveal ? <div className="give-up-confirm"><p>Close this case for 0 deduction points? You can still write a story.</p><button disabled={pending} onClick={() => move('giveup')}>Yes, reveal the spot</button><button onClick={() => setConfirmReveal(false)}>Keep investigating</button></div> : <button className="give-up" onClick={() => setConfirmReveal(true)}>I’m lost. Reveal the spot.</button>}</>}<p className="action-feedback" role="status">{feedback}</p></div></div>}
-      {night.mode === 'practice' && <div className="practice-notice"><span>↳</span><p>You’re playing the practice case. {loggedIn ? 'Ranked play opens when a live daily episode is available.' : 'Sign in for the ranked daily when available.'} Practice scores and stories stay off the public leaderboard.</p>{night.finished && <button className="practice-replay" disabled={pending} onClick={replayPractice}>Replay practice ↻</button>}{!loggedIn && <Link href="/login">Sign in ↗</Link>}</div>}
+      {night.mode === 'practice' && <div className="practice-notice"><span>↳</span><p>You’re playing a practice case about a real NYC place. Generate another case for a new location and four new text clues.</p><button className="practice-replay" disabled={pending || newCaseGenerating} onClick={() => void generateNewCase()}>{newCaseGenerating ? 'Generating a new case…' : 'Generate a new NYC case ✳'}</button>{night.finished && <button className="practice-replay" disabled={pending || newCaseGenerating} onClick={replayPractice}>Replay this case ↻</button>}{!loggedIn && <Link href="/login">Sign in ↗</Link>}</div>}
     </section>
     <section className={`story-section ${night.finished ? 'unlocked' : ''}`} id="stories" aria-labelledby="stories-title"><div className="section-kicker"><span>02 — THE RECONSTRUCTIONS</span><span>THE LOCATION IS FACT. THE REST IS UP TO YOU.</span></div><div className="stories-heading"><h2 id="stories-title">Okay. <em>Explain yourself.</em></h2><p>Same evidence. Different guesses. Wilder stories.<br/>AI reconstructs your night. You edit. The city votes.</p></div>
       {!night.finished ? <div className="stories-locked"><div className="locked-note"><span className="small-label">A NOTE FROM THE NIGHT SHIFT</span><h3>What happened in New York<br/>doesn’t have to stay in New York.</h3><p>Finish the case and AI turns your guesses into a story.<br/>Edit your version. The most eventful night wins the room.</p><span className="handwritten">Make it a night worth explaining. ↗</span></div><div className="story-lock"><Symbol name="lock" size={30}/><h3>First, find the spot.</h3><p>Stories unlock when you finish the case.<br/>No spoilers. No borrowed alibis.</p><button onClick={begin} className="text-button">{started ? 'Back to the evidence' : 'Start investigating'} <Symbol name="arrow"/></button></div></div> : <div className="story-unlocked"><div className="story-editor" id="write-story">
