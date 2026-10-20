@@ -3145,6 +3145,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .generate-story-button > span { font-size: 20px; line-height: 1; }
 .writing-star { animation: slow-turn 3s linear infinite; }
 .generation-tools > span { font: 8px monospace; color: #869275; }
+.simple-night-site .case-section { padding-top: 42px; }
+.simple-sealed { min-height: 220px; grid-template-columns: 1fr; }
+.simple-sealed > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; }
+.simple-sealed h3 { margin: 0; }
+.simple-story-lock { margin-top: 24px; padding: 28px; border: 1px solid rgba(210,225,218,.2); display: flex; align-items: center; gap: 12px; color: #b9c6c1; }
+.simple-night-site .story-unlocked { grid-template-columns: 1fr; }
 .generation-signin p { font-size: 9px; color: #869275; margin: 0; }
 .story-writing { padding: 23px 0 0; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .story-writing i { height: 5px; width: 5px; background: #7d9559; border-radius: 50%; animation: draft-dot 1.3s ease-in-out infinite; }

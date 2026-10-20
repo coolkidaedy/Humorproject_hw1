@@ -59,6 +59,8 @@ test('fresh generator accepts Gemini-chosen NYC places and rejects recent repeat
   ]};
   fresh.clues=fresh.clues.map((clue,index)=>({...clue,fact_ids:[fresh.facts[index].id]}));
   assert.equal(validateFreshGenerated(fresh,[]).answer,'Prospect Park Boathouse');
+  const wrapped=[{...fresh,facts:fresh.facts.map(({id,text})=>({id,detail:text}))}];
+  assert.equal(validateFreshGenerated(wrapped,[]).answer,'Prospect Park Boathouse');
   assert.throws(()=>validateFreshGenerated(fresh,['Prospect Park Boathouse']),/repeated/);
   const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY='test-only';

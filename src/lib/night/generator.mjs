@@ -29,6 +29,7 @@ export function validateGenerated(raw, destination) {
   return { title: raw.title, brief: raw.brief, clues };
 }
 export function validateFreshGenerated(raw, avoidAnswers = []) {
+  if (Array.isArray(raw) && raw.length === 1) raw = raw[0];
   if (!raw || typeof raw !== 'object' || typeof raw.answer !== 'string' || !Array.isArray(raw.aliases) || typeof raw.explanation !== 'string' || !Array.isArray(raw.facts)) throw new Error('Gemini did not return a complete NYC case.');
   const answer = raw.answer.trim();
   const aliases = Array.from(new Set([answer, ...raw.aliases.filter(alias => typeof alias === 'string').map(alias => alias.trim()).filter(Boolean)]));
@@ -38,9 +39,10 @@ export function validateFreshGenerated(raw, avoidAnswers = []) {
   if (raw.facts.length !== 4) throw new Error('Gemini did not provide four location facts.');
   const factIds = new Set();
   const facts = raw.facts.map(fact => {
-    if (!fact || typeof fact !== 'object' || typeof fact.id !== 'string' || !/^[a-z0-9_-]{2,40}$/i.test(fact.id) || factIds.has(fact.id) || typeof fact.text !== 'string' || fact.text.trim().length < 35 || fact.text.trim().length > 350) throw new Error('Gemini returned an invalid location fact.');
+    const text = typeof fact?.text === 'string' ? fact.text : fact?.detail;
+    if (!fact || typeof fact !== 'object' || typeof fact.id !== 'string' || !/^[a-z0-9_-]{2,40}$/i.test(fact.id) || factIds.has(fact.id) || typeof text !== 'string' || text.trim().length < 35 || text.trim().length > 350) throw new Error('Gemini returned an invalid location fact.');
     factIds.add(fact.id);
-    return { id: fact.id, text: fact.text.trim() };
+    return { id: fact.id, text: text.trim() };
   });
   const destination = { answer, aliases, facts };
   const episode = validateGenerated(raw, destination);
@@ -81,7 +83,10 @@ export async function generateFreshEpisode(day, creativeSeed, avoidAnswers = [])
       console.info('[night-ai:new-case] Gemini output', JSON.stringify(raw));
       const episode = validateFreshGenerated(raw, avoidAnswers);
       return { day, ...episode };
-    } catch (error) { lastError = error; }
+    } catch (error) {
+      lastError = error;
+      console.error('[night-ai:new-case] Rejected Gemini output', error instanceof Error ? error.message : 'Unknown validation error');
+    }
   }
   throw lastError instanceof Error ? lastError : new Error('Gemini could not create a valid NYC case.');
 }
