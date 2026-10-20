@@ -37,7 +37,6 @@ create table if not exists public.night_stories (
   title text not null check (char_length(title) between 3 and 80),
   body text not null check (char_length(body) between 80 and 1200),
   created_at timestamptz not null default now(),
-  unique(day, user_id),
   unique(id, day),
   foreign key (day, user_id) references public.night_runs(day, user_id) on delete cascade
 );
@@ -127,7 +126,6 @@ begin
   if uid is null then return jsonb_build_object('error','Sign in to publish your story.'); end if;
   if not exists(select 1 from public.night_runs where day=d and user_id=uid and finished) then return jsonb_build_object('error','Finish the mystery before writing its ending.'); end if;
   if story_title is null or story_body is null or player_alias is null or char_length(trim(story_title)) not between 3 and 80 or char_length(trim(story_body)) not between 80 and 1200 or player_alias !~ '^[a-zA-Z0-9_]{3,20}$' then return jsonb_build_object('error','Check your title, story length and handle.'); end if;
-  if exists(select 1 from public.night_stories where day=d and user_id=uid) then return jsonb_build_object('error','Your story is already published. One version per night keeps voting fair.'); end if;
   if exists(select 1 from public.night_players where lower(alias)=lower(player_alias) and user_id<>uid) then return jsonb_build_object('error','That handle is taken. Choose another.'); end if;
   insert into public.night_players(user_id,alias) values(uid,player_alias) on conflict(user_id) do update set alias=excluded.alias;
   insert into public.night_stories(day,user_id,title,body) values(d,uid,trim(story_title),trim(story_body));

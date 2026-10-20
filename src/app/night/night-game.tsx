@@ -1,13 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import type { Clue, Community, NightState, Story } from '@/lib/night/types';
 import { deductionScore, validStory } from '@/lib/night/rules';
 import { generateNewPracticeCase, generateNightReconstruction, playNight, prepareStoryCase, refreshCommunity, submitNightStory, voteNightStory } from './actions';
 
-type SymbolName = 'arrow' | 'pin' | 'lock' | 'star' | 'check';
+type SymbolName = 'arrow' | 'pin' | 'lock' | 'star';
 function Symbol({ name, size = 20 }: { name: SymbolName; size?: number }) {
   const paths = { arrow: 'M4 12h16m-6-6 6 6-6 6', pin: 'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Zm-5 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0', lock: 'M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0v4', star: 'm12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z', check: 'm4 12 5 5L20 6', clock: 'M12 7v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0' };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
@@ -63,7 +62,6 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId, playe
     document.addEventListener('visibilitychange', refresh);
     return () => document.removeEventListener('visibilitychange', refresh);
   }, [night.day]);
-  const ownStory = community.stories.find(story => story.mine);
   const generateDraft = useCallback(async () => {
     setGenerating(true); setStoryMessage('');
     try {
@@ -83,10 +81,10 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId, playe
     void generateDraft();
   }
   useEffect(() => {
-    if (!night.finished || !draftReady || !loggedIn || body || title || ownStory || autoDraftAttempted.current) return;
+    if (!night.finished || !draftReady || !loggedIn || body || title || autoDraftAttempted.current) return;
     autoDraftAttempted.current = true;
     void generateDraft();
-  }, [night.finished, draftReady, loggedIn, body, title, ownStory, generateDraft]);
+  }, [night.finished, draftReady, loggedIn, body, title, generateDraft]);
   function begin() { setStarted(true); setTimeout(() => gameRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' }), 40); }
   function move(action: 'reveal' | 'guess' | 'giveup') {
     setFeedback('');
@@ -130,7 +128,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId, playe
       router.push('/login');
       return;
     }
-    startTransition(async () => { const result = await submitNightStory(night.day, title, body, alias, night.mode); if (result.error) setStoryMessage(result.error); else { setCommunity(await refreshCommunity(night.day)); setStoryMessage('Your version is posted. Let the city decide.'); } });
+    startTransition(async () => { const result = await submitNightStory(night.day, title, body, alias, night.mode); if (result.error) setStoryMessage(result.error); else { setCommunity(await refreshCommunity(night.day)); setTitle(''); setBody(''); setGenerated(false); autoDraftAttempted.current = true; setStoryMessage('Posted. Generate another story whenever you want.'); } });
   }
   function vote(id: string) {
     setVoteMessage(''); startTransition(async () => { const result = await voteNightStory(id); if (result.error) setVoteMessage(result.error); else { setCommunity(await refreshCommunity(night.day)); setVoteMessage('Vote saved. You can change your pick until midnight ET.'); } });
@@ -162,7 +160,7 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId, playe
     </section>
     <section className={`story-section ${night.finished ? 'unlocked' : ''}`} id="stories" aria-labelledby="stories-title"><div className="stories-heading"><h2 id="stories-title">Your story</h2><p>Generate it, edit it, post it.</p></div>
       {!night.finished ? <div className="simple-story-lock"><Symbol name="lock" size={22}/><span>Finish the case to generate your story.</span></div> : <div className="story-unlocked"><div className="story-editor" id="write-story" ref={storyRef}>
-          {ownStory ? <div className="published-confirmation"><Symbol name="check" size={30}/><h3>Your story is in.</h3><p>“{ownStory.title}” is out there. Read the other reconstructions, vote, or turn one into the next mystery.</p><Link className="story-case-inline" href={`/night/story/${ownStory.id}`} onClick={event => { if (!ownStory.playable) { event.preventDefault(); void openStoryCase(ownStory); } }}>{caseGenerating === ownStory.id ? 'Writing the clues…' : ownStory.playable ? 'Play the case it inspired →' : 'Turn this story into a game ✳'}</Link><span>Published versions stay fixed once voting begins.</span></div> : <>
+          <>
             <div className="reconstruction-intro">
               <div className="guess-trail" aria-label="Your guess trail">
                 {(night.guesses || []).length ? night.guesses.map((attempt, i) => <span key={i} className={attempt.correct ? 'correct' : ''}>{attempt.place}<b aria-label={attempt.correct ? 'correct' : 'wrong'}>{attempt.correct ? '✓' : '×'}</b></span>) : <span>No guesses recorded</span>}
@@ -183,12 +181,12 @@ export function NightGame({ initial, initialCommunity, loggedIn, playerId, playe
               <div className="editor-meta"><span>{body.length}/1,200</span></div>
               <div className="editor-bottom"><div className="handle-input"><label htmlFor="story-alias">@</label><input id="story-alias" aria-label="Public handle" placeholder="your_handle" pattern="[a-zA-Z0-9_]{3,20}" minLength={3} maxLength={20} required disabled={generating || pending} value={alias} onChange={e => setAlias(e.target.value)}/></div><button className="primary-button" disabled={pending || generating || !body.trim()}>{pending ? 'Posting…' : loggedIn ? 'Post my version' : 'Sign in to post'}<Symbol name="arrow" size={17}/></button></div>
             </form>
-          </>}
+          </>
           <p className="action-feedback" role="status">{storyMessage}</p>
           {night.mode === 'practice' && body && <button className="clear-draft" disabled={generating} onClick={clearPracticeDraft}>Clear draft</button>}
         </div></div>}
       <div className="community-stories"><div className="feed-top"><div className="feed-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Everyone’s version <span>{community.stories.length}</span></button><button className={filter === 'mine' ? 'active' : ''} onClick={() => setFilter('mine')}>My story</button></div><button className="refresh-button" disabled={pending} onClick={() => startTransition(async () => setCommunity(await refreshCommunity(night.day)))}>Refresh ↻</button></div><p role="status" className="action-feedback">{voteMessage || caseMessage}</p>{stories.length ? <div className="story-grid">{stories.map(story => <article className="player-story" key={story.id}><div className="player-story-top"><span>@{story.alias}</span><span>{story.mine ? 'YOUR VERSION' : story.sourceKind === 'generated' ? 'AI CASE STORY' : 'DAILY STORY'}</span></div><h3>{story.title}</h3><p>{story.body}</p><button className="story-to-case" disabled={Boolean(caseGenerating)} onClick={() => void openStoryCase(story)}><span>{caseGenerating === story.id ? 'GENERATING EVIDENCE' : story.playable ? 'COMMUNITY CASE READY' : 'AI CASE BUILDER'}</span><b>{caseGenerating === story.id ? 'Turning this night into clues…' : story.playable ? 'Play this story →' : 'Turn this story into a game ✳'}</b></button><div className="player-story-bottom"><span>{story.votes} {story.votes === 1 ? 'vote' : 'votes'} · {story.votes * 50} pts</span><button disabled={pending || story.mine} aria-pressed={story.voted} onClick={() => loggedIn ? vote(story.id) : router.push('/login')} className={story.voted ? 'voted' : ''}><Symbol name="star" size={16}/>{story.voted ? 'Your best night' : story.mine ? 'Your story' : loggedIn ? 'Best night' : 'Sign in to vote'}</button></div></article>)}</div> : <div className="empty-feed"><span>“ ”</span><h3>{filter === 'mine' ? 'Your version is still unwritten.' : 'Every legendary night needs a first storyteller.'}</h3><p>{community.available ? 'Post your version. Come back to read the other stories and cast your vote.' : community.error}</p></div>}</div>
     </section>
-    <dialog ref={howRef} aria-label="How to play Where the hell are we" className="rules-dialog" onClick={e => { if (e.target === e.currentTarget) howRef.current?.close(); }}><div className="dialog-top"><span className="small-label">THE NIGHT SHIFT HANDBOOK</span><button onClick={() => howRef.current?.close()} aria-label="Close rules">✕</button></div><h2>Here’s the<br/><em>story.</em></h2><ol><li><b>Find the spot.</b><p>Four clues point to one real NYC location. Everyone plays the same daily. You get three guesses.</p></li><li><b>Spend your clues wisely.</b><p>Start with 1,000 possible points. Each extra clue costs 200. Each wrong guess costs 100. Solving earns at least 100; revealing the answer earns 0.</p></li><li><b>Reconstruct the night.</b><p>After the reveal, AI writes a personalized story from your guesses and the clues. Edit anything before publishing. One public story per player, per night.</p></li><li><b>Pass the story on.</b><p>Turn any published reconstruction into a new four-clue community case. Everyone plays the same generated version, then comes back to vote.</p></li></ol><p className="rules-fineprint">The daily case and voting reset at midnight in New York. Generated-case stories join the public vote after sign-in. Daily stories stay hidden until you finish.</p><button className="primary-button" onClick={() => { howRef.current?.close(); begin(); }}>Got it. Let’s get lost. <Symbol name="arrow"/></button></dialog>
+    <dialog ref={howRef} aria-label="How to play Where the hell are we" className="rules-dialog" onClick={e => { if (e.target === e.currentTarget) howRef.current?.close(); }}><div className="dialog-top"><span className="small-label">THE NIGHT SHIFT HANDBOOK</span><button onClick={() => howRef.current?.close()} aria-label="Close rules">✕</button></div><h2>Here’s the<br/><em>story.</em></h2><ol><li><b>Find the spot.</b><p>Four clues point to one real NYC location. Everyone plays the same daily. You get three guesses.</p></li><li><b>Spend your clues wisely.</b><p>Start with 1,000 possible points. Each extra clue costs 200. Each wrong guess costs 100. Solving earns at least 100; revealing the answer earns 0.</p></li><li><b>Reconstruct the night.</b><p>After the reveal, AI writes a personalized story from your guesses and the clues. Edit it, post it, then generate as many new versions as you want.</p></li><li><b>Pass the story on.</b><p>Turn any published reconstruction into a new four-clue community case. Everyone plays the same generated version, then comes back to vote.</p></li></ol><p className="rules-fineprint">The daily case and voting reset at midnight in New York. Generated-case stories join the public vote after sign-in. Daily stories stay hidden until you finish.</p><button className="primary-button" onClick={() => { howRef.current?.close(); begin(); }}>Got it. Let’s get lost. <Symbol name="arrow"/></button></dialog>
   </main>;
 }

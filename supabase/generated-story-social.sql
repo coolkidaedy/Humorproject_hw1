@@ -2,6 +2,7 @@
 begin;
 
 alter table public.night_stories drop constraint if exists night_stories_day_user_id_fkey;
+alter table public.night_stories drop constraint if exists night_stories_day_user_id_key;
 alter table public.night_stories add column if not exists source_kind text not null default 'daily';
 alter table public.night_stories drop constraint if exists night_stories_source_kind_check;
 alter table public.night_stories add constraint night_stories_source_kind_check check (source_kind in ('daily','generated'));
@@ -12,7 +13,6 @@ declare uid uuid:=auth.uid(); d date:=(now() at time zone 'America/New_York')::d
 begin
   if uid is null then return jsonb_build_object('error','Sign in to post your story.'); end if;
   if story_title is null or story_body is null or player_alias is null or char_length(trim(story_title)) not between 3 and 80 or char_length(trim(story_body)) not between 80 and 1200 or player_alias !~ '^[a-zA-Z0-9_]{3,20}$' then return jsonb_build_object('error','Check your title, story length and handle.'); end if;
-  if exists(select 1 from public.night_stories where day=d and user_id=uid) then return jsonb_build_object('error','Your story is already posted. One version per day keeps voting fair.'); end if;
   if exists(select 1 from public.night_players where lower(alias)=lower(player_alias) and user_id<>uid) then return jsonb_build_object('error','That handle is taken. Choose another.'); end if;
   insert into public.night_players(user_id,alias) values(uid,player_alias) on conflict(user_id) do update set alias=excluded.alias;
   insert into public.night_stories(day,user_id,title,body,source_kind) values(d,uid,trim(story_title),trim(story_body),'generated');
