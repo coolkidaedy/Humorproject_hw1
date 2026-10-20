@@ -34,7 +34,7 @@ export function validateFreshGenerated(raw, avoidAnswers = []) {
   const answer = raw.answer.trim();
   const aliases = Array.from(new Set([answer, ...raw.aliases.filter(alias => typeof alias === 'string').map(alias => alias.trim()).filter(Boolean)]));
   const normalized = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (answer.length < 3 || answer.length > 100 || aliases.length < 2 || aliases.length > 6 || raw.explanation.trim().length < 30 || raw.explanation.trim().length > 500) throw new Error('Gemini returned an invalid NYC destination.');
+  if (answer.length < 3 || answer.length > 100 || aliases.length < 2 || aliases.length > 6 || raw.explanation.trim().length < 30 || raw.explanation.trim().length > 800) throw new Error('Gemini returned an invalid NYC destination.');
   if (avoidAnswers.some(previous => normalized(previous) === normalized(answer))) throw new Error('Gemini repeated a recent destination.');
   if (raw.facts.length !== 4) throw new Error('Gemini did not provide four location facts.');
   const factIds = new Set();
@@ -45,7 +45,15 @@ export function validateFreshGenerated(raw, avoidAnswers = []) {
     return { id: fact.id, text: text.trim() };
   });
   const destination = { answer, aliases, facts };
-  const episode = validateGenerated(raw, destination);
+  const normalizedCase = {
+    ...raw,
+    clues: Array.isArray(raw.clues) ? raw.clues.map(clue => ({
+      ...clue,
+      kind: clue?.kind === 'receipts' ? 'receipt' : clue?.kind,
+      label: clue?.label ?? clue?.LABEL,
+    })) : raw.clues,
+  };
+  const episode = validateGenerated(normalizedCase, destination);
   const source = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${answer}, New York, NY`)}`;
   return { ...episode, answer, aliases, explanation: raw.explanation.trim(), source };
 }
